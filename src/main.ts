@@ -144,6 +144,49 @@ function setupCopyClipboardButtons(oldDynamo: boolean): void {
     .insertAfter($classLink);
 }
 
+function setupBreadcrumb(oldDynamo: boolean): void {
+  // '#breadcrumb' id is set by setupCopyClipboardButtons before this runs
+  const $h1 = $('#breadcrumb');
+  if ($h1.length === 0) return;
+
+  // Detach the copy button first (preserve its event handler)
+  const $copyBtn = $h1.find('.bda-btn--icon').detach();
+
+  const $nav = $('<nav class="bda-breadcrumb" id="breadcrumb" aria-label="Component path"></nav>');
+  const $links = $h1.find('a');
+  const total = $links.length;
+
+  $links.each(function (i) {
+    const text = $(this).text().replace(/\//g, '').trim();
+    if (!text || text === '/') return;
+
+    if ($nav.children().length > 0) {
+      $('<i class="fa fa-chevron-right bda-breadcrumb__sep"></i>').appendTo($nav);
+    }
+
+    if (i === total - 1) {
+      $(`<span class="bda-breadcrumb__item bda-breadcrumb__item--active">${text}</span>`).appendTo($nav);
+    } else {
+      $(`<a class="bda-breadcrumb__item" href="${$(this).attr('href') ?? '#'}">${text}</a>`).appendTo($nav);
+    }
+  });
+
+  // Handle trailing text node (component name rendered as plain text, not a link)
+  const lastChild = $h1[0]?.lastChild;
+  if (lastChild && lastChild.nodeType === 3 /* TEXT_NODE */) {
+    const text = (lastChild.textContent ?? '').replace(/\//g, '').trim();
+    if (text) {
+      if ($nav.children().length > 0) {
+        $('<i class="fa fa-chevron-right bda-breadcrumb__sep"></i>').appendTo($nav);
+      }
+      $(`<span class="bda-breadcrumb__item bda-breadcrumb__item--active">${text}</span>`).appendTo($nav);
+    }
+  }
+
+  if ($copyBtn.length) $nav.append($copyBtn);
+  $h1.replaceWith($nav);
+}
+
 function bindEscapeKey(): void {
   $(document).on('keyup', (e) => {
     if (e.key === 'Escape' || e.keyCode === 27) {
@@ -213,6 +256,7 @@ function init(): void {
     setupPageTitle(componentPath);
     setupFindClassLink(oldDynamo);
     setupCopyClipboardButtons(oldDynamo);
+    setupBreadcrumb(oldDynamo);
     $('#search').css('display', 'inline');
   }
 

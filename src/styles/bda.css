@@ -1938,6 +1938,54 @@ ol.itemDescAttributes {
 }
 
 /* =============================================================================
+   Component Breadcrumb
+   ============================================================================= */
+.bda-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--bda-surface);
+  border: 1px solid var(--bda-border-subtle);
+  border-radius: var(--bda-radius);
+  font-size: var(--bda-font-size-base);
+  margin-bottom: 12px;
+}
+
+.bda-breadcrumb__item {
+  color: var(--bda-accent);
+  text-decoration: none;
+  padding: 2px 6px;
+  border-radius: var(--bda-radius-sm);
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.bda-breadcrumb__item:hover {
+  background: var(--bda-surface-hover);
+  color: var(--bda-accent-hover);
+}
+
+.bda-breadcrumb__item--active {
+  color: var(--bda-text-strong);
+  font-weight: 600;
+  cursor: default;
+}
+
+.bda-breadcrumb__item--active:hover {
+  background: transparent;
+  color: var(--bda-text-strong);
+}
+
+.bda-breadcrumb__sep {
+  color: var(--bda-border-muted);
+  font-size: 10px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* =============================================================================
    Responsive
    ============================================================================= */
 @media (max-width: 1200px) {

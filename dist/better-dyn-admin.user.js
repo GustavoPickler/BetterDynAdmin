@@ -5410,6 +5410,54 @@ ol.itemDescAttributes {\r
 }\r
 \r
 /* =============================================================================\r
+   Component Breadcrumb\r
+   ============================================================================= */\r
+.bda-breadcrumb {\r
+  display: flex;\r
+  align-items: center;\r
+  flex-wrap: wrap;\r
+  gap: 2px;\r
+  padding: 8px 12px;\r
+  background: var(--bda-surface);\r
+  border: 1px solid var(--bda-border-subtle);\r
+  border-radius: var(--bda-radius);\r
+  font-size: var(--bda-font-size-base);\r
+  margin-bottom: 12px;\r
+}\r
+\r
+.bda-breadcrumb__item {\r
+  color: var(--bda-accent);\r
+  text-decoration: none;\r
+  padding: 2px 6px;\r
+  border-radius: var(--bda-radius-sm);\r
+  transition: background 0.15s ease, color 0.15s ease;\r
+  white-space: nowrap;\r
+}\r
+\r
+.bda-breadcrumb__item:hover {\r
+  background: var(--bda-surface-hover);\r
+  color: var(--bda-accent-hover);\r
+}\r
+\r
+.bda-breadcrumb__item--active {\r
+  color: var(--bda-text-strong);\r
+  font-weight: 600;\r
+  cursor: default;\r
+}\r
+\r
+.bda-breadcrumb__item--active:hover {\r
+  background: transparent;\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.bda-breadcrumb__sep {\r
+  color: var(--bda-border-muted);\r
+  font-size: 10px;\r
+  user-select: none;\r
+  flex-shrink: 0;\r
+}\r
+\r
+/* =============================================================================\r
    Responsive\r
    ============================================================================= */\r
 @media (max-width: 1200px) {\r
@@ -5540,6 +5588,39 @@ ol.itemDescAttributes {\r
       GM_setClipboard($classLink.attr("title") ?? $classLink.text());
     }).insertAfter($classLink);
   }
+  function setupBreadcrumb(oldDynamo) {
+    var _a;
+    const $h1 = $("#breadcrumb");
+    if ($h1.length === 0) return;
+    const $copyBtn = $h1.find(".bda-btn--icon").detach();
+    const $nav = $('<nav class="bda-breadcrumb" id="breadcrumb" aria-label="Component path"></nav>');
+    const $links = $h1.find("a");
+    const total = $links.length;
+    $links.each(function(i) {
+      const text = $(this).text().replace(/\//g, "").trim();
+      if (!text || text === "/") return;
+      if ($nav.children().length > 0) {
+        $('<i class="fa fa-chevron-right bda-breadcrumb__sep"></i>').appendTo($nav);
+      }
+      if (i === total - 1) {
+        $(`<span class="bda-breadcrumb__item bda-breadcrumb__item--active">${text}</span>`).appendTo($nav);
+      } else {
+        $(`<a class="bda-breadcrumb__item" href="${$(this).attr("href") ?? "#"}">${text}</a>`).appendTo($nav);
+      }
+    });
+    const lastChild = (_a = $h1[0]) == null ? void 0 : _a.lastChild;
+    if (lastChild && lastChild.nodeType === 3) {
+      const text = (lastChild.textContent ?? "").replace(/\//g, "").trim();
+      if (text) {
+        if ($nav.children().length > 0) {
+          $('<i class="fa fa-chevron-right bda-breadcrumb__sep"></i>').appendTo($nav);
+        }
+        $(`<span class="bda-breadcrumb__item bda-breadcrumb__item--active">${text}</span>`).appendTo($nav);
+      }
+    }
+    if ($copyBtn.length) $nav.append($copyBtn);
+    $h1.replaceWith($nav);
+  }
   function bindEscapeKey() {
     $(document).on("keyup", (e) => {
       if (e.key === "Escape" || e.keyCode === 27) {
@@ -5591,6 +5672,7 @@ ol.itemDescAttributes {\r
       setupPageTitle(componentPath);
       setupFindClassLink(oldDynamo);
       setupCopyClipboardButtons(oldDynamo);
+      setupBreadcrumb();
       $("#search").css("display", "inline");
     }
     bindEscapeKey();
