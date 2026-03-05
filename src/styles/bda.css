@@ -23,7 +23,16 @@ a {
 }
 
 #RQLToolbar {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: fit-content;
 }
 
 .select2-container .select2-choices .select2-search-field input,
@@ -57,6 +66,36 @@ a {
   max-height: 220px;
 }
 
+#RQLAdd,
+#RQLGo {
+  padding: 5px 14px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #fff;
+  color: #495057;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+#RQLAdd:hover,
+#RQLGo:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+#RQLGo {
+  background: #0d6efd;
+  color: #fff;
+  border-color: #0d6efd;
+}
+
+#RQLGo:hover {
+  background: #0b5ed7;
+  border-color: #0a58ca;
+  color: #fff;
+}
+
 #RQLAdd {
   margin-left: 10px;
 }
@@ -66,14 +105,17 @@ a {
 }
 
 #RQLLog {
-  overflow-x: scroll;
   overflow-x: hidden;
   max-height: 100px;
-  padding: 5px;
-  border: 1px dashed #CCC;
+  padding: 8px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
   width: 800px;
   white-space: pre-wrap;
   font-family: monospace;
+  font-size: 12px;
+  background: #f8f9fa;
+  color: #495057;
 }
 
 #rawXml {
@@ -83,12 +125,16 @@ a {
 }
 
 .dataTable {
-  font-size: 80%;
+  font-size: 13px;
   margin: 5px;
-  border: 1px solid #CCCCCC;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
   z-index: 10;
   position: relative;
   background-color: #FFF;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
 }
 
 .prop_name {
@@ -127,17 +173,33 @@ a {
 
 .dataTable td,
 .dataTable th {
-  padding: 3px;
+  padding: 6px 10px;
 }
 
 .dataTable th {
   min-width: 160px;
   text-align: left;
+  background: #f1f3f5;
+  font-weight: 600;
+  font-size: 12px;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
 }
 
 #itemId {
   width: 125px;
-  height: 26px;
+  height: 28px;
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+#splitValue {
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 13px;
 }
 
 .descriptor {
@@ -148,19 +210,39 @@ a {
   float: left;
   margin-right: 10px;
   margin-bottom: 10px;
-  border: 1px solid #ccc;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
   white-space: nowrap;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.descriptorTable th {
+  background: #f1f3f5;
+  color: #495057;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 8px 10px;
+}
+
+.descriptorTable td {
+  padding: 5px 8px;
 }
 
 #RQLText .CodeMirror {
-  border: 1px solid #aaa;
-  height: 250px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  height: 355px;
   width: 800px;
   cursor: text;
+  font-size: 13px;
 }
 
 #RQLText {
   display: inline-block;
+  vertical-align: top;
 }
 
 .xmlDefinition .CodeMirror {
@@ -175,21 +257,34 @@ a {
 
 .btn-desc {
   display: inline-block;
-  background-color: #f9f9f9;
-  color: #666666;
-  border: 1px solid #dcdcdc;
-  padding: 2px;
+  background-color: #fff;
+  color: #495057;
+  border: 1px solid #ced4da;
+  padding: 3px 8px;
   font-size: 12px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+
+.btn-desc:hover {
+  background-color: #e9ecef;
+  color: #212529;
+  border-color: #adb5bd;
+  text-decoration: none;
 }
 
 .btn-toolbar {
   display: inline-block;
-  background-color: #f9f9f9;
-  color: #444;
-  border: 1px solid #dcdcdc;
-  padding: 5px;
-  font-size: 14px;
-  margin-right: 20px;
+  background-color: #fff;
+  color: #495057;
+  border: 1px solid #ced4da;
+  padding: 6px 12px;
+  font-size: 13px;
+  margin-right: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
 #repoToolbar {
@@ -197,15 +292,13 @@ a {
 }
 
 .btn-toolbar:hover {
-  color: black;
+  background-color: #e9ecef;
+  color: #212529;
+  border-color: #adb5bd;
 }
 
 .red {
   color: #880000;
-}
-
-#splitValue {
-  width: 40px;
 }
 
 .showMore {
@@ -221,6 +314,7 @@ a {
   display: inline-block;
   vertical-align: top;
   margin-left: 5px;
+  max-width: calc(100% - 820px);
 }
 
 #tabs i {
@@ -232,38 +326,117 @@ a {
   margin: 0;
   overflow: hidden;
   padding: 0;
+  display: flex;
+  gap: 2px;
 }
 
 #navbar li {
   float: left;
-  background-color: #ddd;
-  color: #000;
-  padding: 4px 8px;
+  background-color: #f0f0f0;
+  color: #555;
+  padding: 6px 16px;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  border: 1px solid #bbb;
+  border: 1px solid #ddd;
   border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+#navbar li:hover {
+  background-color: #e8e8e8;
+  color: #333;
 }
 
 #navbar li.selected {
   background-color: #fff;
+  color: #111;
+  border-bottom: 1px solid #fff;
+  margin-bottom: -1px;
 }
 
 #descProperties {
   display: none;
-  border: 1px solid #bbb;
-  max-width: 600px;
-  max-height: 224px;
-  overflow-x: auto;
+  border: 1px solid #ddd;
+  border-radius: 0 6px 6px 6px;
+  max-height: 320px;
+  overflow: auto;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
 #descProperties tbody tr:nth-child(odd) {
-  background-color: #F0F0F6;
+  background-color: #f8f9fa;
+}
+
+#descProperties tbody tr:hover {
+  background-color: #e9f0f8;
 }
 
 #descProperties table {
-  font-size: 80%;
+  font-size: 13px;
   border: none;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+#descProperties th {
+  background: #f1f3f5;
+  color: #495057;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 8px 10px;
+  border-bottom: 2px solid #dee2e6;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+#descProperties td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+}
+
+.propQueryBtn {
+  color: #212529;
+  text-decoration: none;
+  cursor: pointer;
+  border-bottom: 1px dashed #adb5bd;
+}
+
+.propQueryBtn:hover {
+  color: #0d6efd;
+  border-bottom-color: #0d6efd;
+}
+
+.bda-enum-toggle {
+  cursor: pointer;
+  color: #0d6efd;
+  font-weight: 500;
+}
+
+.bda-enum-toggle:hover {
+  color: #0a58ca;
+}
+
+.bda-enum-values {
+  display: none;
+  margin-top: 4px;
+  max-width: 160px;
+}
+
+.bda-enum-value {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 1px 2px;
+  border-radius: 10px;
+  font-size: 10px;
+  background: #e9ecef;
+  color: #495057;
 }
 
 .showQueriesLabel {
@@ -275,8 +448,14 @@ a {
 #storedQueries {
   display: inline-block;
   vertical-align: top;
-  border: 1px solid #bbb;
+  border: 1px solid #ddd;
+  border-radius: 0 6px 6px 6px;
   min-width: 350px;
+  max-height: 320px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  padding: 8px;
+  overflow: auto;
 }
 
 .error {
@@ -1172,6 +1351,21 @@ ol.itemDescAttributes {
 .enum,
 .derivation {
   text-decoration: underline;
+}
+
+.bda-attr {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 2px 3px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #e9ecef;
+  color: #6c757d;
+}
+.bda-attr-true {
+  background: #d1e7dd;
+  color: #0f5132;
 }
 
 .data-type,

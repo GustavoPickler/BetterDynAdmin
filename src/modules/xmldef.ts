@@ -144,13 +144,14 @@ export class BdaXmlDef {
         const itemType = $prop.attr('item-type') ?? '';
         const columnName = $prop.attr('column-name') ?? '';
         const propertyType = $prop.attr('property-type') ?? '';
+        const propertyTypeSimple = propertyType ? (propertyType.split('.').pop() ?? propertyType) : '';
         const queryable = $prop.attr('queryable') ?? '';
         const writable = $prop.attr('writable') ?? '';
 
         const typeDisplay = dataType || (itemType ? `<a href="#item_${itemType}">${itemType}</a>` : '');
 
         $tbody.append(
-          `<tr><td>${name}</td><td>${typeDisplay}</td><td>${columnName}</td><td>${propertyType}</td><td>${queryable}</td><td>${writable}</td></tr>`,
+          `<tr><td>${name}</td><td>${typeDisplay}</td><td>${columnName}</td><td><span title="${propertyType}">${propertyTypeSimple}</span></td><td>${queryable}</td><td>${writable}</td></tr>`,
         );
       });
 

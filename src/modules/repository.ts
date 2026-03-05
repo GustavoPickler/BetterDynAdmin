@@ -300,6 +300,12 @@ export class BdaRepository {
     $('#showMoreCacheUsage').on('click', () => this.toggleCacheUsage());
 
     $(this.propertiesSelector).append(makeLink('showMoreProperties'));
+    const $propsTable = $(this.propertiesSelector).next('table');
+    if ($propsTable.length > 0) {
+      this.simplifyClassNames($propsTable);
+      this.simplifyPropertyType($propsTable);
+      this.formatAttributes($propsTable);
+    }
     if (toggleObj['showMoreProperties'] !== 1) this.toggleProperties();
     $('#showMoreProperties').on('click', () => this.toggleProperties());
 
@@ -412,8 +418,67 @@ export class BdaRepository {
   private setupPropertiesTables(): void {
     if ($("a[name=showProperties]").length > 0) {
       $("a[name=showProperties]").next().attr('id', 'propertiesTable');
+      this.simplifyClassNames($('#propertiesTable'));
+      this.simplifyPropertyType($('#propertiesTable'));
+      this.formatAttributes($('#propertiesTable'));
       $('#propertiesTable').find('tr:nth-child(odd)').addClass('odd');
     }
+  }
+
+  private simplifyClassNames($table: JQuery): void {
+    $table.find('td').each((_, td) => {
+      const $td = $(td);
+      const text = $td.text().trim();
+      if (text.includes('.') && /^[\w.]+$/.test(text)) {
+        const simpleName = text.split('.').pop() ?? text;
+        $td.text(simpleName).attr('title', text);
+      }
+    });
+  }
+
+  private formatAttributes($table: JQuery): void {
+    $table.find('td').each((_, td) => {
+      const $td = $(td);
+      const text = $td.text().trim();
+      if (/^\{.*\}$/.test(text) && text.includes('=')) {
+        const entries = text.slice(1, -1).split(',').map(s => s.trim());
+        const html = entries
+          .filter(entry => {
+            const val = entry.split('=')[1] ?? '';
+            return val !== 'false';
+          })
+          .map(entry => {
+            const [key, val] = entry.split('=');
+            const label = (key ?? '').replace(/^template\./, '');
+            const value = val ?? '';
+            const cls = value === 'true' ? 'bda-attr-true' : '';
+            return `<span class="bda-attr ${cls}" title="${key}=${value}">${label}</span>`;
+          })
+          .join(' ');
+        $td.html(html);
+      }
+    });
+  }
+
+  private simplifyPropertyType($table: JQuery): void {
+    $table.find('td').each((_, td) => {
+      const $td = $(td);
+      const text = $td.text().trim();
+      const enumMatch = text.match(/^(\w+)\s+as one of\s+\[([^\]]+)\]$/i);
+      if (enumMatch) {
+        const values = enumMatch[2].split(',').map(s => s.trim());
+        const isBool = values.length === 2 && values.includes('true') && values.includes('false');
+        if (isBool) {
+          $td.text('Boolean');
+        } else {
+          const valuesHtml = values.map(v => `<span class="bda-enum-value">${v}</span>`).join(' ');
+          $td.html(`<span class="bda-enum-toggle" title="Click to expand">Enum</span><div class="bda-enum-values">${valuesHtml}</div>`);
+          $td.find('.bda-enum-toggle').on('click', function () {
+            $(this).next('.bda-enum-values').toggle();
+          });
+        }
+      }
+    });
   }
 
   private showItemPropertyList(item: string): void {
@@ -428,15 +493,30 @@ export class BdaRepository {
           const $td = $(td);
           if (i === 0) {
             $td.html($td.html().replace(/[\w\s']+\((\w+)\)$/i, "<a class='itemPropertyBtn' href='javascript:void(0)'> $1 </a>"));
+            // Wrap the property name text (first text node) as a clickable link
+            const propName = $td.contents().first().text().trim();
+            if (propName) {
+              $td.contents().first().replaceWith(`<a class='propQueryBtn' href='javascript:void(0)' title='Query by ${propName}'>${propName}</a>`);
+            }
           } else if (i === 1) {
-            $td.text($td.text().replace('Class', ''));
+            const classText = $td.text().replace('Class', '').trim();
+            const simpleName = classText.includes('.') ? (classText.split('.').pop() ?? classText) : classText;
+            $td.text(simpleName).attr('title', classText);
           }
         });
       });
+      this.simplifyClassNames($pTable);
+      this.simplifyPropertyType($pTable);
+      this.formatAttributes($pTable);
       $('#descProperties').empty().append($pTable);
       $('.itemPropertyBtn').on('click', (e) => {
         const name = $(e.currentTarget).text().trim();
         this.addToQueryEditor(`<set-property name="${name}"><![CDATA[]]></set-property>\n`);
+      });
+      $('.propQueryBtn').on('click', (e) => {
+        const propName = $(e.currentTarget).text().trim();
+        const query = `<query-items item-descriptor="${item}" id-only="false">\n${propName}=""\n</query-items>\n`;
+        this.setQueryEditorValue(query);
       });
     });
   }

@@ -116,9 +116,11 @@ function setupPageTitle(componentPath: string): void {
 
 function setupFindClassLink(oldDynamo: boolean): void {
   const $classLink = oldDynamo ? $('h1:eq(0)').next() : $('h1:eq(1)').next();
-  const className = $classLink.text().trim();
-  if (className) {
-    $(`<span style='margin-left:25px'><a href='/dyn/dyn/findclass.jhtml?className=${className}&debug=true'>Find Class</a></span>`)
+  const fullClassName = $classLink.text().trim();
+  if (fullClassName) {
+    const simpleName = fullClassName.split('.').pop() ?? fullClassName;
+    $classLink.text(simpleName).attr('title', fullClassName);
+    $(`<span style='margin-left:25px'><a href='/dyn/dyn/findclass.jhtml?className=${fullClassName}&debug=true'>Find Class</a></span>`)
       .insertAfter($classLink);
   }
 }
@@ -137,7 +139,7 @@ function setupCopyClipboardButtons(oldDynamo: boolean): void {
 
   const $classLink = $breadcrumb.next();
   $('<button></button>', { class: 'bda-button bda-button-clipboard', html: "<i class='fa fa-files-o'></i>" })
-    .on('click', () => { GM_setClipboard($classLink.text()); })
+    .on('click', () => { GM_setClipboard($classLink.attr('title') ?? $classLink.text()); })
     .insertAfter($classLink);
 }
 
