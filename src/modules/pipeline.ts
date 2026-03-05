@@ -4,6 +4,7 @@
  */
 
 import { logTrace, processRepositoryXmlDef, highlightAndIndentXml } from '../core/common';
+import { BdaModal } from '../core/modal';
 
 interface VisNode {
   id: number;
@@ -16,6 +17,7 @@ export class BdaPipeline {
   private $pipelineDef: JQuery | null = null;
   private network: unknown = null;
   private graphDirection: 'LR' | 'UD' = 'LR';
+  private pipelineModal: BdaModal | null = null;
 
   private readonly visOptions = {
     width: '100%',
@@ -57,16 +59,15 @@ export class BdaPipeline {
   private setupPipelineManagerPage(): void {
     const $h2 = $("h2:contains('Pipeline Chains')");
 
-    $h2.append(
-      "<div class='popup_block' id='pipelinePopup'>" +
-      "<div><a href='javascript:void(0)' class='close'><i class='fa fa-times'></i></a></div>" +
-      "<div><h3></h3></div>" +
-      "<button id='schemeOrientation'>Switch orientation <i class='fa fa-retweet'></i></button>" +
-      "<div id='pipelineScheme'></div>" +
-      '</div>',
+    const $content = $(
+      "<button id='schemeOrientation' class='bda-btn'>Switch orientation <i class='fa fa-retweet'></i></button>" +
+      "<div id='pipelineScheme'></div>",
     );
-
-    $('#pipelinePopup .close').on('click', () => { $('#pipelinePopup').fadeOut(); });
+    this.pipelineModal = new BdaModal({
+      title: '',
+      content: $content,
+      width: '90vw',
+    }).mount();
 
     const $pipelineTable = $h2.next().attr('id', 'pipelineTable');
     $pipelineTable.find('tr:nth-child(odd)').addClass('odd');
@@ -122,8 +123,8 @@ export class BdaPipeline {
   }
 
   private showPipelineGraph(chainName: string): void {
-    $('#pipelinePopup h3').text(chainName);
-    $('#pipelinePopup').show();
+    this.pipelineModal!.setTitle(chainName);
+    this.pipelineModal!.show();
 
     const container = document.getElementById('pipelineScheme');
     if (!container || !window.vis) return;

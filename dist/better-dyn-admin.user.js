@@ -50,6 +50,108 @@
 (function () {
   'use strict';
 
+  class BdaModal {
+    constructor(opts) {
+      this.mounted = false;
+      this.keydownHandler = null;
+      this.opts = opts;
+      this.$overlay = $('<div class="bda-overlay" role="dialog" aria-modal="true"></div>');
+      this.$modal = $('<div class="bda-modal"></div>');
+      const $header = $('<div class="bda-modal__header"></div>');
+      this.$titleEl = $('<h4 class="bda-modal__title"></h4>');
+      if (opts.title !== void 0) this.$titleEl.text(opts.title);
+      const $closeBtn = $(
+        '<button class="bda-modal__close bda-btn bda-btn--icon" aria-label="Close"><i class="fa fa-times"></i></button>'
+      );
+      $closeBtn.on("click", () => this.hide());
+      $header.append(this.$titleEl, $closeBtn);
+      this.$body = $('<div class="bda-modal__body"></div>');
+      this.setContent(opts.content);
+      this.$modal.append($header, this.$body);
+      if (opts.buttons && opts.buttons.length > 0) {
+        const $footer = $('<div class="bda-modal__footer"></div>');
+        opts.buttons.forEach((btn) => {
+          const modifiers = btn.primary ? " bda-btn--primary" : btn.danger ? " bda-btn--danger" : "";
+          const $btn = $(`<button class="bda-btn${modifiers}">${btn.label}</button>`);
+          if (btn.id) $btn.attr("id", btn.id);
+          if (btn.callback) $btn.on("click", () => btn.callback());
+          $footer.append($btn);
+        });
+        this.$modal.append($footer);
+      }
+      if (opts.width) this.$modal.css({ width: opts.width, maxWidth: opts.width });
+      this.$overlay.append(this.$modal);
+      if (opts.closeOnBackdrop !== false) {
+        this.$overlay.on("click", (e) => {
+          if (e.target === this.$overlay[0]) this.hide();
+        });
+      }
+    }
+    /** The .bda-modal element — use to access inner content before first show */
+    get $el() {
+      return this.$modal;
+    }
+    setContent(content) {
+      this.$body.empty();
+      if (typeof content === "string") {
+        this.$body.html(content);
+      } else {
+        this.$body.append(content);
+      }
+    }
+    setTitle(title) {
+      this.$titleEl.text(title);
+    }
+    /**
+     * Append to <body> immediately (hidden) so event bindings on inner IDs
+     * work before the first `.show()` call.
+     */
+    mount() {
+      if (!$.contains(document.body, this.$overlay[0])) {
+        this.mounted = true;
+        this.$overlay.addClass("bda-overlay--hidden");
+        $("body").append(this.$overlay);
+      }
+      return this;
+    }
+    show() {
+      if (!$.contains(document.body, this.$overlay[0])) {
+        $("body").append(this.$overlay);
+      }
+      this.$overlay.removeClass("bda-overlay--hidden");
+      requestAnimationFrame(() => {
+        this.$overlay.addClass("bda-overlay--visible");
+      });
+      this.keydownHandler = (e) => {
+        if (e.key === "Escape") this.hide();
+      };
+      document.addEventListener("keydown", this.keydownHandler);
+      return this;
+    }
+    hide() {
+      this.$overlay.removeClass("bda-overlay--visible");
+      setTimeout(() => {
+        var _a, _b;
+        if (this.mounted) {
+          this.$overlay.addClass("bda-overlay--hidden");
+        } else {
+          this.$overlay.detach();
+        }
+        if (this.keydownHandler) {
+          document.removeEventListener("keydown", this.keydownHandler);
+          this.keydownHandler = null;
+        }
+        (_b = (_a = this.opts).onClose) == null ? void 0 : _b.call(_a);
+      }, 200);
+    }
+    destroy() {
+      if (this.keydownHandler) {
+        document.removeEventListener("keydown", this.keydownHandler);
+        this.keydownHandler = null;
+      }
+      this.$overlay.remove();
+    }
+  }
   const xmlDefinitionCacheTimeout = 1200;
   function formatString(template, ...args) {
     return template.replace(/{(\d+)}/g, (match, number) => {
@@ -323,31 +425,18 @@
       }).end();
     };
     const pluginName = "bdaAlert";
-    const ALERT_MODAL_TEMPLATE = '<div class="bda-alert-wrapper twbs"><div class="modal fade bda-modal" tabindex="-1" role="dialog"><div class="modal-dialog" role="document"><div class="modal-content"><div class="modal-body bda-alert-body"></div><div class="modal-footer bda-alert-footer"></div></div></div></div></div>';
     $.fn[pluginName] = function(options) {
       try {
         return this.each(function() {
-          const $parent = $(this);
-          const wrapper = $(ALERT_MODAL_TEMPLATE);
-          $parent.append(wrapper);
-          const modal = wrapper.find(".modal");
-          modal.find(".bda-alert-body").html(options.msg);
-          const $footer = modal.find(".bda-alert-footer").empty();
-          const hide = () => {
-            modal.modal("hide");
-            wrapper.detach();
-          };
-          for (const opt of options.options) {
-            $("<input>", {
-              type: "button",
-              value: opt.label,
-              class: "btn btn-default"
-            }).on("click", () => {
-              if (opt._callback) opt._callback();
-              hide();
-            }).appendTo($footer);
-          }
-          modal.modal("show");
+          const modal = new BdaModal({
+            content: options.msg,
+            closeOnBackdrop: false,
+            buttons: options.options.map((opt) => ({
+              label: opt.label,
+              callback: opt._callback
+            }))
+          });
+          modal.show();
         });
       } catch (e) {
         console.error(e);
@@ -546,6 +635,7 @@
   const bdaStorage = new BdaStorage();
   class BdaToolbar {
     constructor(bda) {
+      this.addComponentModal = null;
       this.bda = bda;
     }
     init() {
@@ -572,14 +662,13 @@
       }
     }
     showComponentHistory() {
-      $("<div id='history'></div>").insertAfter(this.bda.logoSelector);
+      const $hist = $("<div id='history'></div>").insertAfter(this.bda.logoSelector);
       const history = JSON.parse(localStorage.getItem("componentHistory") ?? "[]");
-      let html = "Component history : ";
-      history.forEach((comp, i) => {
-        if (i !== 0) html += ", ";
-        html += `<a href='${comp}'>${getComponentNameFromPath(comp)}</a>`;
+      if (history.length === 0) return;
+      const $list = $('<div class="bda-history-list"></div>').appendTo($hist);
+      history.forEach((comp) => {
+        $(`<a class="bda-history-pill" href="${comp}">${getComponentNameFromPath(comp)}</a>`).appendTo($list);
       });
-      $("#history").html(html);
     }
     // -------------------------------------------------------------------------
     // Tag management
@@ -660,8 +749,8 @@
         const shortName = fav.shortName ?? getComponentShortName(fav.name);
         const favId = encodeURIComponent(fav.path);
         const favTags = (fav.tags ?? []).map((t, i, arr) => "#" + t + (i < arr.length - 1 ? "," : "")).join("");
-        $("<div class='toolbar-elem fav'></div>").css("background-color", colorToCss(colors)).css("border", "1px solid " + this.getBorderColor(colors)).html(
-          `<div class='favLink'><a href='${fav.path}' title='${fav.name}'><div class='favTitle'>${shortName}</div><div class='favName'>${fav.name}</div></a></div><div class='favArrow' id='favArrow${favId}'><i class='up fa fa-arrow-down'></i></div><div class='favMoreInfo' id='favMoreInfo${favId}'><div class='favLogDebug'><form method='POST' action='${fav.path}' id='logDebugForm${fav.name}'><input type='hidden' value='loggingDebug' name='propertyName'><input type='hidden' value='' name='newValue'>logDebug : <a href='javascript:void(0)' class='logdebug' id='logDebug${fav.name}'>true</a>&nbsp;|&nbsp;<a href='javascript:void(0)' class='logdebug' id='logDebug${fav.name}'>false</a></form></div><div class='favDelete' id='delete${fav.name}'><i class='fa fa-trash-o'></i> Delete</div><div class='fav-tags'>${favTags}</div></div>`
+        $("<div class='toolbar-elem fav'></div>").html(
+          `<div class='fav-color-bar' style='background:${colorToCss(colors)}'></div><div class='favLink'><a href='${fav.path}' title='${fav.name}'><div class='favTitle'>${shortName}</div><div class='favName'>${fav.name}</div></a></div><div class='favArrow' id='favArrow${favId}'><i class='fa fa-chevron-down'></i></div><div class='favMoreInfo' id='favMoreInfo${favId}'><div class='favLogDebug'><form method='POST' action='${fav.path}' id='logDebugForm${fav.name}'><input type='hidden' value='loggingDebug' name='propertyName'><input type='hidden' value='' name='newValue'>logDebug : <a href='javascript:void(0)' class='logdebug' id='logDebug${fav.name}'>true</a>&nbsp;|&nbsp;<a href='javascript:void(0)' class='logdebug' id='logDebug${fav.name}'>false</a></form></div><div class='favDelete' id='delete${fav.name}'><i class='fa fa-trash-o'></i> Delete</div><div class='fav-tags'>${favTags}</div></div>`
         ).appendTo("#toolbar");
       });
       $(".favArrow").on("click", function() {
@@ -683,32 +772,31 @@
       if (this.bda.isComponentPage) {
         const componentPath = purgeSlashes(document.location.pathname);
         if (!this.isComponentAlreadyStored(componentPath)) {
-          $("<div class='toolbar-elem newFav'><a href='javascript:void(0)' id='addComponent' title='Add component to toolbar'>+</a></div>").appendTo("#toolbar");
-          $(".close").on("click", () => {
-            $(".popup_block").fadeOut();
-          });
+          $("<div class='toolbar-elem newFav'><button class='bda-btn bda-btn--sm' id='addComponent' title='Add to favorites'><i class='fa fa-plus'></i> Add</button></div>").appendTo("#toolbar");
           $("#submitComponent").on("click", () => {
-            $(".popup_block").fadeOut();
+            var _a;
+            (_a = this.addComponentModal) == null ? void 0 : _a.hide();
             const methods = [];
             const vars = [];
             $(".method:checked").each(function() {
-              var _a;
-              methods.push(((_a = this.parentElement) == null ? void 0 : _a.textContent) ?? "");
+              var _a2;
+              methods.push(((_a2 = this.parentElement) == null ? void 0 : _a2.textContent) ?? "");
             });
             $(".variable:checked").each(function() {
-              var _a;
-              vars.push(((_a = this.parentElement) == null ? void 0 : _a.textContent) ?? "");
+              var _a2;
+              vars.push(((_a2 = this.parentElement) == null ? void 0 : _a2.textContent) ?? "");
             });
             let tags2 = buildArray($("#newtags").val());
             $(".tag:checked").each(function() {
-              var _a;
-              tags2.push(((_a = this.parentElement) == null ? void 0 : _a.textContent) ?? "");
+              var _a2;
+              tags2.push(((_a2 = this.parentElement) == null ? void 0 : _a2.textContent) ?? "");
             });
             tags2 = unique(tags2);
             this.storeComponent(componentPath, methods, vars, tags2);
             this.reloadToolbar();
           });
-          $(".newFav").on("click", () => {
+          $("#addComponent").on("click", () => {
+            var _a;
             const $methodsList = $("#methods").empty();
             const $varsList = $("#vars").empty();
             $('h1:contains("Methods")').next().find("tr").each(function(index) {
@@ -741,16 +829,20 @@
             if (defProperties) defProperties.forEach((p) => {
               $(`#var_${p}`).prop("checked", true);
             });
-            $("#addComponentToolbarPopup").fadeIn();
+            (_a = this.addComponentModal) == null ? void 0 : _a.show();
           });
         }
       }
       this.addFavTagList();
     }
     createAddPopup() {
-      $(
-        "<div id='addComponentToolbarPopup' class='popup_block'><div class='addFavOptions'><a href='#' class='close'><i class='fa fa-times'></i></a><h3 class='popup_title'>Add new component</h3><p>Choose methods and/or properties to shortcut : </p><div id='addComponentToolbarPopupContent'><div id='methods'><ul></ul></div><div id='vars'><ul></ul></div></div><br><div id='favSetTags'><div class='favline'><div>Add tags:</div><div><ul id='existingTags'></ul></div></div><div class='favline'><div>New tags:</div><div><input id='newtags' class='newtags' type='text' placeholder='comma separated'></div></div></div><div class='addFavSubmit'><button type='button' id='submitComponent'>Add <i class='fa fa-play'></i></button></div></div></div>"
-      ).insertAfter(this.bda.logoSelector);
+      const $content = $(
+        "<p>Choose methods and/or properties to shortcut : </p><div id='addComponentToolbarPopupContent'><div id='methods'></div><div id='vars'></div></div><div id='favSetTags'><div class='favline'><div>Add tags:</div><div><ul id='existingTags'></ul></div></div><div class='favline'><div>New tags:</div><div><input id='newtags' class='newtags' type='text' placeholder='comma separated'></div></div></div><div class='addFavSubmit'><button type='button' id='submitComponent' class='bda-btn bda-btn--primary'>Add <i class='fa fa-play'></i></button></div>"
+      );
+      this.addComponentModal = new BdaModal({
+        title: "Add new component",
+        content: $content
+      }).mount();
     }
     addExistingTagsToToolbarPopup() {
       const tags = bdaStorage.getTags();
@@ -768,15 +860,14 @@
       const $favline = $("<div id='favTagList' class='favline'>").appendTo("#toolbar");
       const $list = $("<ul></ul>");
       if (Object.keys(tags).length > 0) {
-        $('<button id="clear-filters" class="bda-button bda-button-icon" title="Clear"><i class="fa fa-times" aria-hidden="true"></i></button>').on("click", () => {
+        $('<button id="clear-filters" class="bda-btn bda-btn--icon" title="Clear"><i class="fa fa-times" aria-hidden="true"></i></button>').on("click", () => {
           this.clearTags();
         }).appendTo($('<li class="tag-filter"></li>').appendTo($list));
       }
       const sortedTags = sortArray(Object.keys(tags));
       sortedTags.forEach((tagName) => {
         const tag = tags[tagName];
-        const tagColor = stringToColour(tagName);
-        const $li = $('<li class="bda-button tag-filter"></li>').css("background-color", colorToCss(tagColor)).css("border", "1px solid " + this.getBorderColor(tagColor)).appendTo($list);
+        const $li = $(`<li class="bda-tag-pill${tag.selected ? " bda-tag-pill--active" : ""}"></li>`).appendTo($list);
         $("<input/>", {
           id: `favFilter_${tagName}`,
           type: "checkbox",
@@ -860,34 +951,52 @@
     init() {
       console.time("bdaMenu");
       logTrace("BdaMenu init");
-      this.$menuBar = $("<div id='menuBar'></div>").appendTo("body");
-      this.createBugReportPanel();
-      this.createBackupPanel();
-      this.createConfigurationPanel();
-      this.createWhatsnewPanel();
-      this.createSearchBox();
-      this.$menuBar.on("click", ".menu", (event) => {
-        const $thisParent = $(event.currentTarget);
-        $(".menu").each(function() {
-          const $this = $(this);
-          const $panel2 = $("#" + $this.attr("data-panel"));
-          if ($this.attr("id") !== $thisParent.attr("id") && $panel2.css("display") !== "none") {
-            $panel2.slideToggle();
-            rotateArrow($this.find(".menuArrow i"));
-          }
-        });
-        const $panel = $("#" + $thisParent.attr("data-panel"));
-        $panel.slideToggle();
-        rotateArrow($thisParent.find(".menuArrow i"));
+      if (bdaStorage.getConfigurationValue("dark_mode") === true) {
+        $("body").addClass("bda-dark");
+      }
+      const $navbar = $('<nav id="bdaNavbar"></nav>').appendTo("body");
+      const $left = $('<div class="bda-nav__left"></div>').appendTo($navbar);
+      $('<span class="bda-nav__brand">BDA</span>').appendTo($left);
+      this.createSearchBox($left);
+      this.$navRight = $('<div class="bda-nav__right" id="bdaNavActions"></div>').appendTo($navbar);
+      this.createAboutItem();
+      this.createConfigItem();
+      this.createWhatsnewItem();
+      $(document).on("click.bdaNav", (e) => {
+        if (!$(e.target).closest("#bdaNavbar").length) {
+          this.closeAllDropdowns();
+        }
       });
       console.timeEnd("bdaMenu");
     }
     // -------------------------------------------------------------------------
-    // Bug report panel
+    // Navigation helpers
     // -------------------------------------------------------------------------
-    createBugReportPanel() {
-      $("<div id='bdaBug' class='menu' data-panel='bdaBugPanel'></div>").appendTo(this.$menuBar).html("<p>About</p><div class='menuArrow'><i class='up fa fa-arrow-down'></i></div>");
-      $("<div id='bdaBugPanel' class='menuPanel'></div>").appendTo("body").html(
+    createNavItem(id, icon, label) {
+      const $item = $(`<div class="bda-nav__item" id="${id}"></div>`).appendTo(this.$navRight);
+      const $btn = $(`<button class="bda-nav__btn"><i class="fa ${icon}"></i> ${label}</button>`).appendTo($item);
+      const $dropdown = $(`<div class="bda-nav__dropdown" id="${id}Dropdown"></div>`).appendTo($item);
+      $btn.on("click", (e) => {
+        e.stopPropagation();
+        const isOpen = $dropdown.hasClass("bda-nav__dropdown--open");
+        this.closeAllDropdowns();
+        if (!isOpen) {
+          $dropdown.addClass("bda-nav__dropdown--open");
+          $btn.addClass("bda-nav__btn--active");
+        }
+      });
+      return { $btn, $dropdown };
+    }
+    closeAllDropdowns() {
+      this.$navRight.find(".bda-nav__dropdown").removeClass("bda-nav__dropdown--open");
+      this.$navRight.find(".bda-nav__btn").removeClass("bda-nav__btn--active");
+    }
+    // -------------------------------------------------------------------------
+    // About panel
+    // -------------------------------------------------------------------------
+    createAboutItem() {
+      const { $dropdown } = this.createNavItem("bdaBug", "fa-info-circle", "About");
+      $dropdown.html(
         `<p>Better Dyn Admin has a <a target='_blank' href='https://github.com/jc7447/BetterDynAdmin'>GitHub page</a>.<br>
       Please report any bug in the <a target='_blank' href='https://github.com/jc7447/BetterDynAdmin/issues'>issues tracker</a>.
       <br><br><strong>BDA version ${GM_info.script.version}</strong></p>`
@@ -896,22 +1005,23 @@
     // -------------------------------------------------------------------------
     // What's new panel
     // -------------------------------------------------------------------------
-    createWhatsnewPanel() {
-      $("<div id='whatsnew' class='menu' data-panel='whatsnewPanel'></div>").appendTo(this.$menuBar).html("<p>What's new</p><div class='menuArrow'><i class='up fa fa-arrow-down'></i></div>");
-      $("<div id='whatsnewPanel' class='menuPanel'></div>").appendTo("body").html("<p id='whatsnewContent'></p>");
-      $("#whatsnew").on("click", () => {
-        if ($("#whatsnewPanel").css("display") === "none") {
-          $("#whatsnewContent").html(GM_getResourceText("whatsnew"));
+    createWhatsnewItem() {
+      const { $btn, $dropdown } = this.createNavItem("whatsnew", "fa-star", "What's New");
+      let loaded = false;
+      $btn.on("click", () => {
+        if (!loaded && $dropdown.hasClass("bda-nav__dropdown--open")) {
+          $dropdown.html(GM_getResourceText("whatsnew"));
+          loaded = true;
         }
       });
     }
     // -------------------------------------------------------------------------
     // Backup panel
     // -------------------------------------------------------------------------
-    createBackupPanel() {
-      $("<div id='bdaBackup' class='menu' data-panel='bdaBackupPanel'></div>").appendTo(this.$menuBar).html("<p>Backup</p><div class='menuArrow'><i class='up fa fa-arrow-down'></i></div>");
-      $("<div id='bdaBackupPanel' class='menuPanel'></div>").appendTo("body").html(
-        "<p>Backup BDA data to keep your favorite components and stored queries safe.<br><br><strong>You can also import a backup from another domain!</strong></p><textarea id='bdaData' placeholder='Paste your data here to restore it.'></textarea><button id='bdaDataBackup'>Backup</button><button id='bdaDataRestore'>Restore</button>"
+    createBackupItem() {
+      const { $dropdown } = this.createNavItem("bdaBackup", "fa-database", "Backup");
+      $dropdown.html(
+        "<p>Backup BDA data to keep your favorite components and stored queries safe.<br><br><strong>You can also import a backup from another domain!</strong></p><textarea id='bdaData' placeholder='Paste your data here to restore it.'></textarea><div style='margin-top:6px'><button id='bdaDataBackup' class='bda-btn'>Backup</button> <button id='bdaDataRestore' class='bda-btn'>Restore</button></div>"
       );
       $("#bdaDataBackup").on("click", () => {
         const data = bdaStorage.getData();
@@ -933,12 +1043,20 @@
     // -------------------------------------------------------------------------
     // Configuration panel
     // -------------------------------------------------------------------------
-    createConfigurationPanel() {
-      $("<div id='bdaConfig' class='menu' data-panel='bdaConfigPanel'></div>").appendTo(this.$menuBar).html("<p>Configuration</p><div class='menuArrow'><i class='up fa fa-arrow-down'></i></div>");
-      const $panel = $("<div id='bdaConfigPanel' class='menuPanel'></div>").appendTo("body");
+    createConfigItem() {
+      const { $dropdown } = this.createNavItem("bdaConfig", "fa-cog", "Config");
+      const isDarkMode = bdaStorage.getConfigurationValue("dark_mode") === true;
+      $dropdown.html(
+        `<p>Dark mode: <input type='checkbox' id='dark_mode_checkbox' ${isDarkMode ? "checked" : ""}></p>`
+      );
+      $("#dark_mode_checkbox").on("change", function() {
+        const checked = $(this).prop("checked");
+        bdaStorage.storeConfiguration("dark_mode", checked);
+        $("body").toggleClass("bda-dark", checked);
+      });
       const monoInstanceKey = "mono_instance";
       const isMonoInstance = GM_getValue(monoInstanceKey) === true;
-      $panel.html(
+      $dropdown.append(
         `<p>Same BDA data on every domain: <input type='checkbox' id='mono_instance_checkbox' ${isMonoInstance ? "checked" : ""}></p>`
       );
       $("#mono_instance_checkbox").on("change", function() {
@@ -946,17 +1064,17 @@
         GM_setValue(monoInstanceKey, checked);
         if (checked) GM_setValue("BDA_GM_Backup", JSON.stringify(bdaStorage.getData()));
       });
-      this.createCheckBoxConfig($panel, {
+      this.createCheckBoxConfig($dropdown, {
         name: "search_autocomplete",
         description: "Search AutoComplete",
         message: "<p>Note: Reload dyn/admin to apply.</p>"
       });
-      this.createCheckBoxConfig($panel, {
+      this.createCheckBoxConfig($dropdown, {
         name: "defaultOpenXmlDefAsTable",
         description: "Display XML Def as table by default"
       });
-      this.createDefaultMethodsConfig($panel);
-      this.createDataSourceFolderConfig($panel);
+      this.createDefaultMethodsConfig($dropdown);
+      this.createDataSourceFolderConfig($dropdown);
     }
     createCheckBoxConfig($parent, options) {
       const value = bdaStorage.getConfigurationValue(options.name) === true;
@@ -974,7 +1092,7 @@
       $config.append(
         `<p>Default methods when bookmarking:</p><textarea id='config-methods-data' placeholder='Comma separated'>${savedMethods.join(",")}</textarea>`
       );
-      $("<button>Save methods</button>").on("click", () => {
+      $('<button class="bda-btn">Save methods</button>').on("click", () => {
         const arr = $("#config-methods-data").val().replace(/ /g, "").split(",").filter(Boolean);
         bdaStorage.storeConfiguration("default_methods", arr);
       }).appendTo($config);
@@ -982,7 +1100,7 @@
       $config.append(
         `<p>Default properties when bookmarking:</p><textarea id='config-properties-data' placeholder='Comma separated'>${savedProps.join(",")}</textarea>`
       );
-      $("<button>Save properties</button>").on("click", () => {
+      $('<button class="bda-btn">Save properties</button>').on("click", () => {
         const arr = $("#config-properties-data").val().replace(/ /g, "").split(",").filter(Boolean);
         bdaStorage.storeConfiguration("default_properties", arr);
       }).appendTo($config);
@@ -993,7 +1111,7 @@
       $config.append(
         `<p>JDBC datasource folders:</p><textarea id='config-data-source-folders-data' placeholder='Comma separated paths'>${saved}</textarea>`
       );
-      $("<button>Save folders</button>").on("click", () => {
+      $('<button class="bda-btn">Save folders</button>').on("click", () => {
         const val = $("#config-data-source-folders-data").val().trim();
         bdaStorage.storeConfiguration("data_source_folder", val);
       }).appendTo($config);
@@ -1001,10 +1119,10 @@
     // -------------------------------------------------------------------------
     // Search box
     // -------------------------------------------------------------------------
-    createSearchBox() {
-      $("<div id='bdaSearch' class='menu'></div>").appendTo(this.$menuBar).html(
-        '<p>Search</p><form action="/dyn/admin/atg/dynamo/admin/en/cmpn-search.jhtml"><input type="text" name="query" id="searchFieldBDA" placeholder="focus: ctrl+shift+f"></form>'
-      );
+    createSearchBox($parent) {
+      $(
+        '<form class="bda-nav__search" action="/dyn/admin/atg/dynamo/admin/en/cmpn-search.jhtml"><input type="text" name="query" id="searchFieldBDA" placeholder="Search… (ctrl+shift+f)"></form>'
+      ).appendTo($parent);
       try {
         const autocomplete = bdaStorage.getConfigurationValue("search_autocomplete") === true;
         if (autocomplete) {
@@ -1096,11 +1214,11 @@
       </optgroup>
     </select>`;
       $("<div id='RQLToolbar'></div>").append(
-        `<div> Action : ${actionSelect} <span id='editor'><span id='itemIdField'>ids : <input type='text' id='itemId' placeholder='Id1,Id2,Id3' /></span><span id='itemDescriptorField'> descriptor : <select id='itemDescriptor' class='itemDescriptor'>${this.getDescriptorOptions()}</select></span><span id='idOnlyField' style='display:none;'><label for='idOnly'>&nbsp;id only : </label><input type='checkbox' id='idOnly' /></span></span><button type='button' id='RQLAdd'>Add</button><button type='button' id='RQLGo'>Add &amp; Enter <i class='fa fa-play fa-x'></i></button></div>`
+        `<div> Action : ${actionSelect} <span id='editor'><span id='itemIdField'>ids : <input type='text' id='itemId' class='bda-input' placeholder='Id1,Id2,Id3' /></span><span id='itemDescriptorField'> descriptor : <select id='itemDescriptor' class='itemDescriptor'>${this.getDescriptorOptions()}</select></span><span id='idOnlyField' style='display:none;'><label for='idOnly'>&nbsp;id only : </label><input type='checkbox' id='idOnly' /></span></span><button type='button' id='RQLAdd' class='bda-btn'>Add</button><button type='button' id='RQLGo' class='bda-btn bda-btn--primary'>Add &amp; Enter <i class='fa fa-play fa-x'></i></button></div>`
       ).insertBefore("#RQLEditor textarea").after("<div id='RQLText'></div>");
       $("#xmltext").appendTo("#RQLText");
       $("#RQLText").after(
-        "<div id='tabs'><ul id='navbar'><li id='propertiesTab' class='selected'>Properties</li><li id='queriesTab'>Stored Queries</li></ul><div id='storedQueries'><i>No stored query for this repository</i></div><div id='descProperties'><i>Select a descriptor to see his properties</i></div></div>"
+        "<div id='tabs'><ul id='navbar' class='bda-tabs'><li id='propertiesTab' class='bda-tabs__item bda-tabs__item--active'>Properties</li><li id='queriesTab' class='bda-tabs__item'>Stored Queries</li></ul><div id='storedQueries'><i>No stored query for this repository</i></div><div id='descProperties'><i>Select a descriptor to see his properties</i></div></div>"
       );
       $("#RQLForm input[type=submit]").remove();
       const splitObj = this.getStoredSplitObj();
@@ -1108,7 +1226,7 @@
       const isChecked = (splitObj == null ? void 0 : splitObj.activeSplit) ?? false;
       const checkboxSplit = `<input type='checkbox' id='noSplit' ${isChecked ? "checked" : ""} /> don't split.`;
       $("#tabs").after(
-        `<div id='RQLSave'><div style='display:inline-block;width:200px'><button id='clearQuery' type='button'>Clear <i class='fa fa-ban fa-x'></i></button></div><div style='display:inline-block;width:530px'>Split tab every : <input type='text' value='${itemByTab}' id='splitValue'> items. ${checkboxSplit}</div><button type='submit' id='RQLSubmit'>Enter <i class='fa fa-play fa-x'></i></button></div><div><input placeholder='Name this query' type='text' id='queryLabel'>&nbsp;<button type='button' id='saveQuery'>Save <i class='fa fa-save fa-x'></i></button></div>`
+        `<div id='RQLSave'><div style='display:inline-block;width:200px'><button id='clearQuery' type='button' class='bda-btn'>Clear <i class='fa fa-ban fa-x'></i></button></div><div style='display:inline-block;width:530px'>Split tab every : <input type='text' value='${itemByTab}' id='splitValue' class='bda-input' style='height:auto;'> items. ${checkboxSplit}</div><button type='submit' id='RQLSubmit' class='bda-btn bda-btn--primary'>Enter <i class='fa fa-play fa-x'></i></button></div><div><input placeholder='Name this query' type='text' id='queryLabel' class='bda-input' style='height:auto;'>&nbsp;<button type='button' id='saveQuery' class='bda-btn'>Save <i class='fa fa-save fa-x'></i></button></div>`
       );
       this.showQueryList();
       this.setupItemTreeForm();
@@ -1162,14 +1280,14 @@
       $("#queriesTab").on("click", () => {
         $("#descProperties").css("display", "none");
         $("#storedQueries").css("display", "inline-block");
-        $("#queriesTab").addClass("selected");
-        $("#propertiesTab").removeClass("selected");
+        $("#queriesTab").addClass("selected bda-tabs__item--active");
+        $("#propertiesTab").removeClass("selected bda-tabs__item--active");
       });
       $("#propertiesTab").on("click", () => {
         $("#descProperties").css("display", "inline-block");
         $("#storedQueries").css("display", "none");
-        $("#propertiesTab").addClass("selected");
-        $("#queriesTab").removeClass("selected");
+        $("#propertiesTab").addClass("selected bda-tabs__item--active");
+        $("#queriesTab").removeClass("selected bda-tabs__item--active");
       });
       $("#RQLAction").on("change", () => {
         const action = $("#RQLAction").val();
@@ -1191,6 +1309,20 @@
       $("#clearQuery").on("click", () => this.setQueryEditorValue(""));
       $("#noSplit").on("change", () => this.storeSplitValue());
       $("#splitValue").on("change", () => this.storeSplitValue());
+      $(document).on("keydown.bdaRepo", (e) => {
+        if (e.ctrlKey && e.key === "Enter") {
+          e.preventDefault();
+          this.submitRQLQuery(false);
+        }
+        if (e.ctrlKey && !e.shiftKey && e.key === "s") {
+          e.preventDefault();
+          $("#saveQuery").trigger("click");
+        }
+        if (e.ctrlKey && e.shiftKey && e.key === "C") {
+          e.preventDefault();
+          this.setQueryEditorValue("");
+        }
+      });
     }
     // -------------------------------------------------------------------------
     // Toggle sections
@@ -1286,14 +1418,14 @@
         const isDebugEnabled = $(`a[href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors']`).length > 0;
         html += `<tr class='${rowClass}'>`;
         html += `<td class='descriptor'>${d}</td>`;
-        html += `<td><a class='btn-desc' href='${componentURI}?action=seetmpl&itemdesc=${d}#showProperties'>Properties</a>`;
-        html += `&nbsp;<a class='btn-desc' href='${componentURI}?action=seenamed&itemdesc=${d}#namedQuery'>Named queries</a></td>`;
+        html += `<td><a class='bda-btn bda-btn--sm' href='${componentURI}?action=seetmpl&itemdesc=${d}#showProperties'>Properties</a>`;
+        html += `&nbsp;<a class='bda-btn bda-btn--sm' href='${componentURI}?action=seenamed&itemdesc=${d}#namedQuery'>Named queries</a></td>`;
         html += "<td>";
         if (isDebugEnabled) {
-          html += `<a class='btn-desc red' href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors'>Disable</a>`;
+          html += `<a class='bda-btn bda-btn--sm bda-btn--danger' href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors'>Disable</a>`;
         } else {
-          html += `<a class='btn-desc' href='${componentURI}?action=setiddbg&itemdesc=${d}#listItemDescriptors'>Enable</a>`;
-          html += `&nbsp;<a class='btn-desc' href='${componentURI}?action=dbgprops&itemdesc=${d}#debugProperties'>Edit</a>`;
+          html += `<a class='bda-btn bda-btn--sm' href='${componentURI}?action=setiddbg&itemdesc=${d}#listItemDescriptors'>Enable</a>`;
+          html += `&nbsp;<a class='bda-btn bda-btn--sm' href='${componentURI}?action=dbgprops&itemdesc=${d}#debugProperties'>Edit</a>`;
         }
         html += "</td></tr>";
         if (i !== 0 && ((i + 1) % splitValue === 0 || i + 1 === descriptors.length)) html += "</table>";
@@ -1710,9 +1842,9 @@ ALL ORDER BY ID DESC RANGE 0+10
         let extra = curProp.name === "id" ? " id" : curProp.name === "descriptor" ? " descriptor" : "";
         html += `<tr class='${i % 2 === 0 ? "even" : "odd"}${extra}'>`;
         html += `<th>${curProp.name}<span class='prop_name'>`;
-        if (curProp.rdonly === "true") html += "<div class='prop_attr prop_attr_red'>R</div>";
-        if (curProp.derived === "true") html += "<div class='prop_attr prop_attr_green'>D</div>";
-        if (curProp.exportable === "true") html += "<div class='prop_attr prop_attr_blue'>E</div>";
+        if (curProp.rdonly === "true") html += "<span class='bda-badge bda-badge--danger'>R</span>";
+        if (curProp.derived === "true") html += "<span class='bda-badge bda-badge--success'>D</span>";
+        if (curProp.exportable === "true") html += "<span class='bda-badge bda-badge--accent'>E</span>";
         html += "</span></th>";
         datas.forEach((d) => {
           html += this.renderProperty(curProp, d[curProp.name], d["id"], isItemTree);
@@ -1788,7 +1920,7 @@ ALL ORDER BY ID DESC RANGE 0+10
       }
       $outputDiv.append(html);
       $outputDiv.prepend(
-        "<div class='prop_attr prop_attr_red'>R</div> : read-only <div class='prop_attr prop_attr_green'>D</div> : derived <div class='prop_attr prop_attr_blue'>E</div> : export is false"
+        "<span class='bda-badge bda-badge--danger'>R</span> : read-only <span class='bda-badge bda-badge--success'>D</span> : derived <span class='bda-badge bda-badge--accent'>E</span> : export is false"
       );
       if ($(".copyField").length > 0) {
         $outputDiv.find("p.nbResults").append("<br><a href='javascript:void(0)' class='showFullTextLink'>Show full text</a>");
@@ -1873,7 +2005,7 @@ ${query}`)) {
         "<p>This tool will recursively retrieve items and print the result with the chosen output.<br> For example, if you give an order ID in the form below, you will get all shipping groups, payment groups, commerceItems, priceInfo... of the given order<br><b> Be careful when using this tool on a live instance ! Set a low max items value.</b></p>"
       );
       $itemTree.append(
-        "<div id='itemTreeForm'>id : <input type='text' id='itemTreeId' /> &nbsp;descriptor : <span id='itemTreeDescriptorField'><select id='itemTreeDesc' class='itemDescriptor'>" + this.getDescriptorOptions() + `</select></span>max items : <input type='text' id='itemTreeMax' value='50' />&nbsp;<br><br>output format : <select id='itemTreeOutput'><option value='HTMLtab'>HTML tab</option><option value='addItem'>add-item XML</option><option value='removeItem'>remove-item XML</option><option value='printItem'>print-item XML</option><option value='tree'>Tree (experimental)</option></select>&nbsp;<input type='checkbox' id='printRepositoryAttr' /><label for='printRepositoryAttr'>Print attribute : </label><pre style='margin:0; display:inline;'>repository='${getCurrentComponentPath()}'</pre> <br><br><button id='itemTreeBtn'>Enter <i class='fa fa-play fa-x'></i></button></div>`
+        "<div id='itemTreeForm'>id : <input type='text' id='itemTreeId' /> &nbsp;descriptor : <span id='itemTreeDescriptorField'><select id='itemTreeDesc' class='itemDescriptor'>" + this.getDescriptorOptions() + `</select></span>max items : <input type='text' id='itemTreeMax' value='50' />&nbsp;<br><br>output format : <select id='itemTreeOutput'><option value='HTMLtab'>HTML tab</option><option value='addItem'>add-item XML</option><option value='removeItem'>remove-item XML</option><option value='printItem'>print-item XML</option><option value='tree'>Tree (experimental)</option></select>&nbsp;<input type='checkbox' id='printRepositoryAttr' /><label for='printRepositoryAttr'>Print attribute : </label><pre style='margin:0; display:inline;'>repository='${getCurrentComponentPath()}'</pre> <br><br><button id='itemTreeBtn' class='bda-btn bda-btn--primary'>Enter <i class='fa fa-play fa-x'></i></button></div>`
       );
       $itemTree.append("<div id='itemTreeInfo' />");
       $itemTree.append("<div id='itemTreeResult' />");
@@ -1976,7 +2108,7 @@ ${query}`)) {
       $("#itemTreeResult").empty();
       const componentPath = getCurrentComponentPath();
       if (outputType !== "HTMLtab" && outputType !== "tree") {
-        $("#itemTreeInfo").append("<input type='button' id='itemTreeCopyButton' value='Copy result to clipboard' />");
+        $("#itemTreeInfo").append("<button type='button' id='itemTreeCopyButton' class='bda-btn'>Copy result to clipboard</button>");
         $("#itemTreeCopyButton").on("click", () => copyToClipboard($("#itemTreeResult").text()));
       }
       if (outputType === "addItem") {
@@ -2138,7 +2270,7 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
           const [, itemDesc = "", cacheMode = "", , cacheLocality = ""] = match;
           $tr.attr("data-item-desc", itemDesc).attr("data-cache-mode", cacheMode).attr("data-cache-locality", cacheLocality);
           $td.html(
-            `<span class="cacheArrow"><i class="up fa fa-arrow-right"></i></span><span> item-descriptor=<b>${itemDesc}</b></span><span> cache-mode=<b>${cacheMode}</b></span>` + (cacheLocality ? `<span> cache-locality=<b>${cacheLocality}</b></span>` : "")
+            `<span class="cacheArrow"><i class="fa fa-chevron-right"></i></span><span> item-descriptor=<b>${itemDesc}</b></span><span> cache-mode=<b>${cacheMode}</b></span>` + (cacheLocality ? `<span> cache-locality=<b>${cacheLocality}</b></span>` : "")
           );
         }
         $tr.on("click", () => this.toggleCacheLine(el));
@@ -2167,6 +2299,7 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       this.$pipelineDef = null;
       this.network = null;
       this.graphDirection = "LR";
+      this.pipelineModal = null;
       this.visOptions = {
         width: "100%",
         height: "550px",
@@ -2204,12 +2337,14 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
     }
     setupPipelineManagerPage() {
       const $h2 = $("h2:contains('Pipeline Chains')");
-      $h2.append(
-        "<div class='popup_block' id='pipelinePopup'><div><a href='javascript:void(0)' class='close'><i class='fa fa-times'></i></a></div><div><h3></h3></div><button id='schemeOrientation'>Switch orientation <i class='fa fa-retweet'></i></button><div id='pipelineScheme'></div></div>"
+      const $content = $(
+        "<button id='schemeOrientation' class='bda-btn'>Switch orientation <i class='fa fa-retweet'></i></button><div id='pipelineScheme'></div>"
       );
-      $("#pipelinePopup .close").on("click", () => {
-        $("#pipelinePopup").fadeOut();
-      });
+      this.pipelineModal = new BdaModal({
+        title: "",
+        content: $content,
+        width: "90vw"
+      }).mount();
       const $pipelineTable = $h2.next().attr("id", "pipelineTable");
       $pipelineTable.find("tr:nth-child(odd)").addClass("odd");
       $pipelineTable.find("tr:first").append("<th>Show XML</th><th>Show graph</th>");
@@ -2251,8 +2386,8 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       highlightAndIndentXml($codeBlock);
     }
     showPipelineGraph(chainName) {
-      $("#pipelinePopup h3").text(chainName);
-      $("#pipelinePopup").show();
+      this.pipelineModal.setTitle(chainName);
+      this.pipelineModal.show();
       const container = document.getElementById("pipelineScheme");
       if (!container || !window.vis) return;
       const data = this.createNodesAndEdges(chainName);
@@ -2511,7 +2646,7 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       const $endpointRow = $('<div class="bda-actor-endpoint"></div>');
       const $endpointLabel = $("<span>REST endpoint: </span>");
       const $endpointLink = $("<code></code>").text(restEndpoint);
-      const $copyBtn = $('<button class="bda-button bda-button-clipboard"><i class="fa fa-files-o"></i></button>').on("click", () => {
+      const $copyBtn = $('<button class="bda-btn bda-btn--icon"><i class="fa fa-files-o"></i></button>').on("click", () => {
         copyToClipboard(restEndpoint);
       });
       $endpointRow.append($endpointLabel, $endpointLink, $copyBtn);
@@ -2526,7 +2661,7 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
         });
         $callerDiv.append($inputSection);
       }
-      const $callBtn = $('<button class="bda-button btn btn-primary">Call Chain</button>').on("click", () => {
+      const $callBtn = $('<button class="bda-btn bda-btn--primary">Call Chain</button>').on("click", () => {
         const params = {};
         $callerDiv.find("input[data-name]").each(function() {
           params[$(this).data("name")] = $(this).val();
@@ -2750,6 +2885,92 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       });
     }
   }
+  class KeyboardShortcuts {
+    constructor() {
+      this.shortcuts = [];
+      this.helpVisible = false;
+    }
+    register(shortcut) {
+      this.shortcuts.push(shortcut);
+    }
+    unregister(module) {
+      this.shortcuts = this.shortcuts.filter((s) => s.module !== module);
+    }
+    getAll() {
+      return [...this.shortcuts];
+    }
+    init() {
+      $(document).on("keydown.bdaKeyboard", (e) => {
+        const target = e.target;
+        const inInput = ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable === true;
+        for (const s of this.shortcuts) {
+          const keyMatch = e.key.toLowerCase() === s.key.toLowerCase();
+          const ctrlMatch = !!s.ctrl === e.ctrlKey;
+          const altMatch = !!s.alt === e.altKey;
+          const shiftMatch = !!s.shift === e.shiftKey;
+          if (!keyMatch || !ctrlMatch || !altMatch || !shiftMatch) continue;
+          if (inInput && !s.ctrl && !s.alt && !s.shift) continue;
+          e.preventDefault();
+          s.handler();
+          return;
+        }
+      });
+    }
+    showHelp() {
+      if (this.helpVisible) {
+        this.hideHelp();
+        return;
+      }
+      this.helpVisible = true;
+      const byModule = {};
+      for (const s of this.shortcuts) {
+        if (!byModule[s.module]) byModule[s.module] = [];
+        byModule[s.module].push(s);
+      }
+      const formatKey = (s) => {
+        const parts = [];
+        if (s.ctrl) parts.push("Ctrl");
+        if (s.alt) parts.push("Alt");
+        if (s.shift) parts.push("Shift");
+        parts.push(s.key === "?" ? "?" : s.key.toUpperCase());
+        return parts.join("+");
+      };
+      let rows = "";
+      for (const [mod, shortcuts] of Object.entries(byModule)) {
+        rows += `<tr class="bda-help-module-row"><td colspan="2"><strong>${mod}</strong></td></tr>`;
+        for (const s of shortcuts) {
+          rows += `<tr><td><kbd>${formatKey(s)}</kbd></td><td>${s.description}</td></tr>`;
+        }
+      }
+      const $overlay = $('<div id="bda-help-overlay"></div>');
+      const $panel = $(`
+      <div class="bda-help-panel">
+        <div class="bda-help-header">
+          <span>Keyboard Shortcuts</span>
+          <button class="bda-btn bda-btn--icon" id="bda-help-close"><i class="fa fa-times"></i></button>
+        </div>
+        <table class="bda-help-table">${rows}</table>
+        <p class="bda-help-hint">Press <kbd>?</kbd> or <kbd>Esc</kbd> to close</p>
+      </div>
+    `);
+      $overlay.append($panel);
+      $("body").append($overlay);
+      $overlay.on("click", (e) => {
+        if (e.target === $overlay[0]) this.hideHelp();
+      });
+      $("#bda-help-close").on("click", () => this.hideHelp());
+      requestAnimationFrame(() => {
+        $overlay.addClass("bda-help-overlay--visible");
+      });
+    }
+    hideHelp() {
+      this.helpVisible = false;
+      const $overlay = $("#bda-help-overlay");
+      $overlay.removeClass("bda-help-overlay--visible");
+      setTimeout(() => $overlay.remove(), 200);
+    }
+  }
+  const bdaKeyboard = new KeyboardShortcuts();
   class BdaComponent {
     /**
      * Set a property value on an ATG Dynamo component
@@ -2844,36 +3065,8 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       this.commandHistory = [];
       this.variables = {};
       this.lastOutput = null;
+      this.dashModal = null;
       this.HIST_PERSIST_SIZE = 20;
-      this.MODAL_HTML = `
-    <div id="dashModal" class="twbs modal fade" tabindex="-1" role="dialog">
-      <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal">&times;</button>
-            <h4 class="modal-title">DASH - DynAdmin SHell</h4>
-          </div>
-          <div class="modal-body">
-            <div id="dashScreen" class="bda-dash-screen"></div>
-            <div class="bda-dash-input-row">
-              <span class="bda-dash-prompt">$</span>
-              <input type="text" id="dashInput" class="bda-dash-input" placeholder="Type a command..." autocomplete="off">
-              <button class="bda-button btn btn-primary btn-sm" id="dashSubmit">Run</button>
-            </div>
-            <div id="dashScripts" class="bda-dash-scripts" style="display:none">
-              <div id="dashScriptList"></div>
-              <input type="text" id="dashScriptName" placeholder="Script name">
-              <button class="bda-button btn btn-sm btn-default" id="dashSaveScript">Save</button>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-default" data-dismiss="modal">Close</button>
-            <button class="btn btn-default" id="dashToggleScripts"><i class="fa fa-file-text-o"></i> Scripts</button>
-            <button class="btn btn-default" id="dashClear"><i class="fa fa-trash-o"></i> Clear</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
       this.historyIndex = -1;
       this.bda = bda;
     }
@@ -2881,23 +3074,38 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       logTrace("BdaDash init");
       this.loadHistory();
       this.createModal();
-      this.createLaunchButton();
     }
     // -------------------------------------------------------------------------
     // Modal setup
     // -------------------------------------------------------------------------
     createModal() {
-      $("body").append(this.MODAL_HTML);
+      const $content = $(
+        '<div id="dashScreen" class="bda-dash-screen"></div><div class="bda-dash-input-row"><span class="bda-dash-prompt">$</span><input type="text" id="dashInput" class="bda-dash-input" placeholder="Type a command..." autocomplete="off"><button class="bda-btn bda-btn--primary bda-btn--sm" id="dashSubmit">Run</button></div><div id="dashScripts" class="bda-dash-scripts" style="display:none"><div id="dashScriptList"></div><input type="text" id="dashScriptName" placeholder="Script name"><button class="bda-btn bda-btn--sm" id="dashSaveScript">Save</button></div>'
+      );
+      this.dashModal = new BdaModal({
+        title: "DASH — DynAdmin SHell",
+        content: $content,
+        width: "800px",
+        buttons: [
+          { label: "Close", callback: () => this.dashModal.hide() },
+          { id: "dashToggleScripts", label: '<i class="fa fa-file-text-o"></i> Scripts' },
+          { id: "dashClear", label: '<i class="fa fa-trash-o"></i> Clear' }
+        ]
+      }).mount();
       this.bindModalEvents();
     }
     createLaunchButton() {
-      const $btn = $(
-        '<div id="dashLaunch" class="bda-dash-launch"><a href="javascript:void(0)" title="Open DASH"><i class="fa fa-terminal"></i> DASH</a></div>'
-      );
+      const $btn = $('<button class="bda-nav__btn" id="dashLaunch" title="Open DASH"><i class="fa fa-terminal"></i> DASH</button>');
       $btn.on("click", () => {
-        $("#dashModal").modal("show");
+        var _a;
+        (_a = this.dashModal) == null ? void 0 : _a.show();
       });
-      $("body").append($btn);
+      const $navActions = $("#bdaNavActions");
+      if ($navActions.length) {
+        $('<div class="bda-nav__item"></div>').append($btn).appendTo($navActions);
+      } else {
+        $("body").append($btn);
+      }
     }
     bindModalEvents() {
       const $input = $("#dashInput");
@@ -2937,9 +3145,15 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
         bdaStorage.storeScript({ name, content: commands });
         this.renderScripts();
       });
-      $(document).on("keydown", (e) => {
-        if (e.ctrlKey && e.altKey && e.key === "t") {
-          $("#dashModal").modal("show");
+      bdaKeyboard.register({
+        key: "t",
+        ctrl: true,
+        alt: true,
+        description: "Open DASH (alternate)",
+        module: "DASH",
+        handler: () => {
+          var _a;
+          (_a = this.dashModal) == null ? void 0 : _a.show();
         }
       });
     }
@@ -3101,7 +3315,7 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
     // -------------------------------------------------------------------------
     appendInputLine(text) {
       $("#dashScreen").append(
-        `<div class="bda-dash-line"><span class="bda-dash-prompt">$</span><span class="bda-dash-line-input">${this.escapeHtml(text)}</span><button class="bda-button bda-dash-copy btn btn-xs" title="Copy"><i class="fa fa-files-o"></i></button></div>`
+        `<div class="bda-dash-line"><span class="bda-dash-prompt">$</span><span class="bda-dash-line-input">${this.escapeHtml(text)}</span><button class="bda-btn bda-btn--sm bda-dash-copy" title="Copy"><i class="fa fa-files-o"></i></button></div>`
       );
       this.bindCopyButtons();
       this.scrollToBottom();
@@ -3159,8 +3373,8 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       }
       scripts.forEach((s) => {
         const $row = $(`<div class="bda-dash-script-row"><strong>${s.name}</strong></div>`);
-        const $runBtn = $('<button class="bda-button btn btn-xs btn-primary">Run</button>');
-        const $delBtn = $('<button class="bda-button btn btn-xs btn-danger">Delete</button>');
+        const $runBtn = $('<button class="bda-btn bda-btn--sm bda-btn--primary">Run</button>');
+        const $delBtn = $('<button class="bda-btn bda-btn--sm bda-btn--danger">Delete</button>');
         $runBtn.on("click", async () => {
           for (const line of s.content.split("\n")) {
             if (line.trim()) await this.executeCommand(line.trim());
@@ -3256,7 +3470,1995 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       logTrace("Scheduler timeline rendered");
     }
   }
-  const bdaCss = 'body {\r\n  padding-left: 15px;\r\n}\r\n\r\ntr.even td {\r\n  background-color: #FFF;\r\n}\r\n\r\n#itemTreeId {\r\n  width: 100px;\r\n}\r\n\r\n#itemTreeMax {\r\n  width: 40px;\r\n}\r\n\r\na {\r\n  text-decoration: none\r\n}\r\n\r\n.fa-pencil-square-o {\r\n  cursor: pointer;\r\n}\r\n\r\n#RQLToolbar {\r\n  margin-bottom: 12px;\r\n  padding: 10px 14px;\r\n  background: #f8f9fa;\r\n  border: 1px solid #e0e0e0;\r\n  border-radius: 6px;\r\n  display: flex;\r\n  align-items: center;\r\n  gap: 8px;\r\n  flex-wrap: wrap;\r\n  width: fit-content;\r\n}\r\n\r\n.select2-container .select2-choices .select2-search-field input,\r\n.select2-container .select2-choice,\r\n.select2-container .select2-choices {\r\n  font-family: "Arial";\r\n  font-size: 13px;\r\n  color: black;\r\n}\r\n\r\n.select2-chosen,\r\n.select2-choice > span:first-child,\r\n.select2-container .select2-choices .select2-search-field input {\r\n  padding: 4px 6px;\r\n}\r\n\r\n#select2-drop {\r\n  font-size: 13px;\r\n}\r\n\r\n.select2-container .select2-choice {\r\n  height: 24px;\r\n}\r\n\r\n.select2-container .select2-choice .select2-arrow b,\r\n.select2-container .select2-choice div b {\r\n  background-position: 0 0;\r\n}\r\n\r\n.select2-results {\r\n  max-height: 220px;\r\n}\r\n\r\n#RQLAdd,\r\n#RQLGo {\r\n  padding: 5px 14px;\r\n  border: 1px solid #ced4da;\r\n  border-radius: 4px;\r\n  background: #fff;\r\n  color: #495057;\r\n  font-size: 13px;\r\n  cursor: pointer;\r\n  transition: all 0.15s;\r\n}\r\n\r\n#RQLAdd:hover,\r\n#RQLGo:hover {\r\n  background: #e9ecef;\r\n  border-color: #adb5bd;\r\n}\r\n\r\n#RQLGo {\r\n  background: #0d6efd;\r\n  color: #fff;\r\n  border-color: #0d6efd;\r\n}\r\n\r\n#RQLGo:hover {\r\n  background: #0b5ed7;\r\n  border-color: #0a58ca;\r\n  color: #fff;\r\n}\r\n\r\n#RQLAdd {\r\n  margin-left: 10px;\r\n}\r\n\r\n#RQLResults {\r\n  margin-top: 10px;\r\n}\r\n\r\n#RQLLog {\r\n  overflow-x: hidden;\r\n  max-height: 100px;\r\n  padding: 8px 12px;\r\n  border: 1px solid #dee2e6;\r\n  border-radius: 6px;\r\n  width: 800px;\r\n  white-space: pre-wrap;\r\n  font-family: monospace;\r\n  font-size: 12px;\r\n  background: #f8f9fa;\r\n  color: #495057;\r\n}\r\n\r\n#rawXml {\r\n  display: none;\r\n  margin: 0px;\r\n  padding: 0px;\r\n}\r\n\r\n.dataTable {\r\n  font-size: 13px;\r\n  margin: 5px;\r\n  border: 1px solid #dee2e6;\r\n  border-radius: 6px;\r\n  z-index: 10;\r\n  position: relative;\r\n  background-color: #FFF;\r\n  border-collapse: separate;\r\n  border-spacing: 0;\r\n  overflow: hidden;\r\n}\r\n\r\n.prop_name {\r\n  font-size: 80%;\r\n}\r\n\r\n.prop_attr {\r\n  display: inline-block;\r\n  margin: 2px;\r\n  padding: 1px;\r\n  color: white;\r\n  vertical-align: middle;\r\n}\r\n\r\n.prop_attr_red {\r\n  background-color: red;\r\n}\r\n\r\n.prop_attr_blue {\r\n  background-color: blue;\r\n}\r\n\r\n.prop_attr_green {\r\n  background-color: green;\r\n}\r\n\r\n.copyLink {\r\n  text-decoration: none;\r\n  color: #00214a;\r\n}\r\n\r\n.copyField {\r\n  width: 200px;\r\n  display: none;\r\n}\r\n\r\n.dataTable td,\r\n.dataTable th {\r\n  padding: 6px 10px;\r\n}\r\n\r\n.dataTable th {\r\n  min-width: 160px;\r\n  text-align: left;\r\n  background: #f1f3f5;\r\n  font-weight: 600;\r\n  font-size: 12px;\r\n  color: #495057;\r\n  border-bottom: 2px solid #dee2e6;\r\n}\r\n\r\n#itemId {\r\n  width: 125px;\r\n  height: 28px;\r\n  padding: 4px 8px;\r\n  border: 1px solid #ced4da;\r\n  border-radius: 4px;\r\n  font-size: 13px;\r\n}\r\n\r\n#splitValue {\r\n  padding: 4px 8px;\r\n  border: 1px solid #ced4da;\r\n  border-radius: 4px;\r\n  font-size: 13px;\r\n}\r\n\r\n.descriptor {\r\n  margin: 5px 10px 5px 5px;\r\n}\r\n\r\n.descriptorTable {\r\n  float: left;\r\n  margin-right: 10px;\r\n  margin-bottom: 10px;\r\n  border: 1px solid #dee2e6;\r\n  border-radius: 6px;\r\n  white-space: nowrap;\r\n  overflow: hidden;\r\n  font-size: 13px;\r\n}\r\n\r\n.descriptorTable th {\r\n  background: #f1f3f5;\r\n  color: #495057;\r\n  font-weight: 600;\r\n  font-size: 12px;\r\n  text-transform: uppercase;\r\n  letter-spacing: 0.3px;\r\n  padding: 8px 10px;\r\n}\r\n\r\n.descriptorTable td {\r\n  padding: 5px 8px;\r\n}\r\n\r\n#RQLText .CodeMirror {\r\n  border: 1px solid #ced4da;\r\n  border-radius: 6px;\r\n  height: 355px;\r\n  width: 800px;\r\n  cursor: text;\r\n  font-size: 13px;\r\n}\r\n\r\n#RQLText {\r\n  display: inline-block;\r\n  vertical-align: top;\r\n}\r\n\r\n.xmlDefinition .CodeMirror {\r\n  border: 1px solid #eee;\r\n  height: auto;\r\n}\r\n\r\n.xmlDefinition .CodeMirror-scroll {\r\n  overflow-y: hidden;\r\n  overflow-x: auto;\r\n}\r\n\r\n.btn-desc {\r\n  display: inline-block;\r\n  background-color: #fff;\r\n  color: #495057;\r\n  border: 1px solid #ced4da;\r\n  padding: 3px 8px;\r\n  font-size: 12px;\r\n  border-radius: 4px;\r\n  transition: all 0.15s;\r\n  text-decoration: none;\r\n}\r\n\r\n.btn-desc:hover {\r\n  background-color: #e9ecef;\r\n  color: #212529;\r\n  border-color: #adb5bd;\r\n  text-decoration: none;\r\n}\r\n\r\n.btn-toolbar {\r\n  display: inline-block;\r\n  background-color: #fff;\r\n  color: #495057;\r\n  border: 1px solid #ced4da;\r\n  padding: 6px 12px;\r\n  font-size: 13px;\r\n  margin-right: 12px;\r\n  border-radius: 4px;\r\n  cursor: pointer;\r\n  transition: all 0.15s;\r\n}\r\n\r\n#repoToolbar {\r\n  margin-bottom: 20px;\r\n}\r\n\r\n.btn-toolbar:hover {\r\n  background-color: #e9ecef;\r\n  color: #212529;\r\n  border-color: #adb5bd;\r\n}\r\n\r\n.red {\r\n  color: #880000;\r\n}\r\n\r\n.showMore {\r\n  font-size: 80%;\r\n}\r\n\r\n.storedQueriesTitle {\r\n  font-size: 13px;\r\n  font-weight: bold;\r\n}\r\n\r\n#tabs {\r\n  display: inline-block;\r\n  vertical-align: top;\r\n  margin-left: 5px;\r\n  max-width: calc(100% - 820px);\r\n}\r\n\r\n#tabs i {\r\n  font-size: 80%;\r\n}\r\n\r\n#navbar {\r\n  list-style-type: none;\r\n  margin: 0;\r\n  overflow: hidden;\r\n  padding: 0;\r\n  display: flex;\r\n  gap: 2px;\r\n}\r\n\r\n#navbar li {\r\n  float: left;\r\n  background-color: #f0f0f0;\r\n  color: #555;\r\n  padding: 6px 16px;\r\n  font-size: 13px;\r\n  font-weight: 500;\r\n  cursor: pointer;\r\n  border: 1px solid #ddd;\r\n  border-bottom: none;\r\n  border-radius: 6px 6px 0 0;\r\n  transition: background-color 0.15s, color 0.15s;\r\n}\r\n\r\n#navbar li:hover {\r\n  background-color: #e8e8e8;\r\n  color: #333;\r\n}\r\n\r\n#navbar li.selected {\r\n  background-color: #fff;\r\n  color: #111;\r\n  border-bottom: 1px solid #fff;\r\n  margin-bottom: -1px;\r\n}\r\n\r\n#descProperties {\r\n  display: none;\r\n  border: 1px solid #ddd;\r\n  border-radius: 0 6px 6px 6px;\r\n  max-height: 320px;\r\n  overflow: auto;\r\n  background: #fff;\r\n  box-shadow: 0 1px 3px rgba(0,0,0,0.06);\r\n}\r\n\r\n#descProperties tbody tr:nth-child(odd) {\r\n  background-color: #f8f9fa;\r\n}\r\n\r\n#descProperties tbody tr:hover {\r\n  background-color: #e9f0f8;\r\n}\r\n\r\n#descProperties table {\r\n  font-size: 13px;\r\n  border: none;\r\n  border-collapse: collapse;\r\n  width: 100%;\r\n}\r\n\r\n#descProperties th {\r\n  background: #f1f3f5;\r\n  color: #495057;\r\n  font-weight: 600;\r\n  font-size: 12px;\r\n  text-transform: uppercase;\r\n  letter-spacing: 0.3px;\r\n  padding: 8px 10px;\r\n  border-bottom: 2px solid #dee2e6;\r\n  position: sticky;\r\n  top: 0;\r\n  z-index: 1;\r\n}\r\n\r\n#descProperties td {\r\n  padding: 6px 10px;\r\n  border-bottom: 1px solid #eee;\r\n  vertical-align: middle;\r\n}\r\n\r\n.propQueryBtn {\r\n  color: #212529;\r\n  text-decoration: none;\r\n  cursor: pointer;\r\n  border-bottom: 1px dashed #adb5bd;\r\n}\r\n\r\n.propQueryBtn:hover {\r\n  color: #0d6efd;\r\n  border-bottom-color: #0d6efd;\r\n}\r\n\r\n.bda-enum-toggle {\r\n  cursor: pointer;\r\n  color: #0d6efd;\r\n  font-weight: 500;\r\n}\r\n\r\n.bda-enum-toggle:hover {\r\n  color: #0a58ca;\r\n}\r\n\r\n.bda-enum-values {\r\n  display: none;\r\n  margin-top: 4px;\r\n  max-width: 160px;\r\n}\r\n\r\n.bda-enum-value {\r\n  display: inline-block;\r\n  padding: 1px 6px;\r\n  margin: 1px 2px;\r\n  border-radius: 10px;\r\n  font-size: 10px;\r\n  background: #e9ecef;\r\n  color: #495057;\r\n}\r\n\r\n.showQueriesLabel {\r\n  font-size: 80%;\r\n  margin: 0px;\r\n  padding: 5px 0px 0px 0px;\r\n}\r\n\r\n#storedQueries {\r\n  display: inline-block;\r\n  vertical-align: top;\r\n  border: 1px solid #ddd;\r\n  border-radius: 0 6px 6px 6px;\r\n  min-width: 350px;\r\n  max-height: 320px;\r\n  background: #fff;\r\n  box-shadow: 0 1px 3px rgba(0,0,0,0.06);\r\n  padding: 8px;\r\n  overflow: auto;\r\n}\r\n\r\n.error {\r\n  color: red;\r\n}\r\n\r\n#RQLSave {\r\n  margin: 5px;\r\n}\r\n\r\n.queryView {\r\n  display: none;\r\n}\r\n\r\n.previewQuery {\r\n  margin-top: 5px;\r\n  margin-left: 10px;\r\n  cursor: pointer;\r\n}\r\n\r\n.deleteQuery {\r\n  margin-top: 5px;\r\n  margin-left: 10px;\r\n  cursor: pointer;\r\n}\r\n\r\n.menuArrow {\r\n  text-align: center;\r\n  cursor: pointer;\r\n  padding-top: 5px;\r\n}\r\n\r\n.menuArrow img {\r\n  width: 15px;\r\n  height: 8px;\r\n}\r\n\r\n/** MENU **/\r\n#menuBar {\r\n  position: absolute;\r\n  top: 0px;\r\n  right: 30px;\r\n}\r\n\r\n.menu {\r\n  height: 32px;\r\n  font-size: 11px;\r\n  color: white;\r\n  border: 1px solid #00486c;\r\n  background-color: #007bb8;\r\n  border-top: none;\r\n  padding: 3px;\r\n  text-align: center;\r\n  float: right;\r\n  margin-top: 0px;\r\n  margin-right: 3px;\r\n}\r\n\r\n.menu p {\r\n  margin: 0;\r\n}\r\n\r\n.menuPanel {\r\n  position: absolute;\r\n  top: 39px;\r\n  right: 33px;\r\n  width: 296px;\r\n  font-size: 11px;\r\n  color: white;\r\n  border: 1px solid #00486c;\r\n  border-top: none;\r\n  padding: 3px;\r\n  display: none;\r\n}\r\n\r\n.menuPanel a {\r\n  text-decoration: underline;\r\n  color: white;\r\n}\r\n\r\n.menuPanel textarea {\r\n  width: 100%;\r\n}\r\n\r\n#bdaBug {\r\n  background-color: #007bb8;\r\n}\r\n\r\n#bdaBugPanel {\r\n  background-color: #007bb8;\r\n}\r\n\r\n#bdaBackup {\r\n  background-color: #007bb8;\r\n}\r\n\r\n#bdaBackupPanel {\r\n  background-color: #007bb8;\r\n}\r\n\r\n#bdaSearch {\r\n  background-color: #007bb8;\r\n}\r\n\r\n#bdaSearch input {\r\n  margin-top: 1px;\r\n  height: 20px;\r\n}\r\n\r\n#whatsnew {\r\n  background-color: #62A03E;\r\n  border-color: #44702B;\r\n}\r\n\r\n#whatsnewPanel {\r\n  border-color: #44702B;\r\n  background-color: #62A03E;\r\n}\r\n\r\n#bdaConfig {\r\n  background-color: #007bb8;\r\n}\r\n\r\n#bdaConfigPanel {\r\n  background-color: #007bb8;\r\n}\r\n\r\n#history {\r\n  clear: both;\r\n}\r\n\r\n#toolbar {\r\n  padding: 5px;\r\n}\r\n\r\n.toolbar-elem {\r\n  float: left;\r\n}\r\n\r\n.newFav {\r\n  font-size: 30px;\r\n  border: 1px dashed #AAAAAA;\r\n  height: 54px;\r\n  width: 50px;\r\n  text-align: center;\r\n  margin: 4px;\r\n  line-height: 48px;\r\n  cursor: pointer;\r\n}\r\n\r\n.favFilter {\r\n  border: 1px dashed #AAAAAA;\r\n  height: 54px;\r\n  width: 50px;\r\n  margin: 4px;\r\n  cursor: pointer;\r\n  text-align: center;\r\n  font-size: 20px;\r\n  margin: 4px;\r\n  line-height: 48px;\r\n}\r\n\r\n#favFilter {\r\n  margin-top: 15px;\r\n}\r\n\r\n.fav-chevron {\r\n  line-height: 48px;\r\n}\r\n\r\n#favTagList {\r\n  clear: left;\r\n  margin-left: 5px;\r\n  margin-top: 3px;\r\n}\r\n\r\n#addComponent {\r\n  color: #AAAAAA;\r\n  text-decoration: none;\r\n}\r\n\r\n#favSetTags {\r\n  margin-bottom: 5px;\r\n}\r\n\r\n.bda-button {\r\n  color: white;\r\n  border: 1px solid #ccc;\r\n  border-radius: 3px;\r\n  font-size: 12px;\r\n  padding: 0px 6px 0px 0px;\r\n  cursor: pointer;\r\n}\r\n\r\n.bda-button label,\r\n.bda-button input,\r\n.bda-button button {\r\n  vertical-align: middle;\r\n}\r\n\r\n.bda-button-icon {\r\n  height: 22px;\r\n  width: 22px;\r\n  padding: 0px 0px 0px 0px;\r\n  vertical-align: middle;\r\n}\r\n\r\n.bda-button-clipboard {\r\n  margin-left: 10px;\r\n  padding: 3px;\r\n  color: black;\r\n  vertical-align: middle;\r\n  border-radius: 5px;\r\n}\r\n\r\n.tag-filter-button {\r\n  color: black;\r\n}\r\n\r\n.tag-filter {\r\n  cursor: pointer;\r\n}\r\n\r\n.tag-filter label {\r\n  margin-left: 5px;\r\n  cursor: pointer;\r\n}\r\n\r\n.favline {\r\n  margin-bottom: 5px;\r\n  display: block;\r\n}\r\n\r\n.favline ul {\r\n  margin: 0;\r\n  padding: 0;\r\n  list-style-type: none;\r\n  width: 100%;\r\n  overflow-x: auto;\r\n  white-space: nowrap;\r\n}\r\n\r\n.favline div {\r\n  display: inline-block;\r\n}\r\n\r\n.favline li {\r\n  display: inline-block;\r\n  list-style: none; /* pour enlever les puces sur IE7 */\r\n  margin: 2px;\r\n}\r\n\r\n.newtags {\r\n  width: 85%;\r\n}\r\n\r\n.fav {\r\n  min-height: 50px;\r\n  min-width: 75px;\r\n  margin: 4px;\r\n  padding: 2px;\r\n  color: white;\r\n}\r\n\r\n.fav a {\r\n  color: white;\r\n}\r\n\r\n.favLink {\r\n  text-align: center;\r\n  line-height: 16px;\r\n}\r\n\r\n.favLink a,\r\n.logdebug {\r\n  color: white;\r\n  text-decoration: none;\r\n}\r\n\r\n.favName {\r\n  display: inline-block;\r\n  vertical-align: bottom;\r\n  font-size: 11px;\r\n}\r\n\r\n.favArrow {\r\n  text-align: center;\r\n  cursor: pointer;\r\n  padding-top: 2px;\r\n  font-size: 11px;\r\n}\r\n\r\n.favArrow img {\r\n  width: 15px;\r\n  height: 8px;\r\n}\r\n\r\n.favTitle {\r\n  font-size: 14px;\r\n  font-weight: bold;\r\n  margin-bottom: 5px;\r\n  text-align: center;\r\n}\r\n\r\n.favMoreInfo {\r\n  font-size: 11px;\r\n  display: none;\r\n  padding: 0;\r\n  text-align: left;\r\n}\r\n\r\n.favDelete {\r\n  cursor: pointer;\r\n}\r\n\r\n.fav-button {\r\n  cursor: pointer;\r\n  margin-right: 5px;\r\n}\r\n\r\n.favLogDebug form {\r\n  margin: 0;\r\n}\r\n\r\n.favLogDebug {\r\n  margin-bottom: 2px;\r\n  margin-top: 2px;\r\n}\r\n\r\n.del-cross {\r\n  font-weight: bold;\r\n  font-size: 13px;\r\n}\r\n\r\n#oracleATGbrand {\r\n  width: 120px;\r\n  cursor: pointer;\r\n}\r\n\r\n#xmlHighlight {\r\n  margin-bottom: 0px;\r\n}\r\n\r\n#rawXml pre {\r\n  margin: 0;\r\n}\r\n\r\n#sqltext {\r\n  display: block;\r\n}\r\n\r\n#curDataSourceName {\r\n  font-weight: bold;\r\n}\r\n\r\n#sqlResult {\r\n  border-collapse: collapse;\r\n  width: 100%;\r\n  border: 1px solid #ccc;\r\n}\r\n\r\n#sqlResult td,\r\n#sqlResult th {\r\n  text-align: center;\r\n  border-right: 1px solid #ccc;\r\n  background: none;\r\n}\r\n\r\n#sqlResult tbody tr:nth-child(odd) {\r\n  background-color: #F0F0F6;\r\n}\r\n\r\n/* Extra selectors needed to override the default styling */\r\ntable.tablesorter tbody tr.normal-row td {\r\n  background: #fff;\r\n  color: #3d3d3d;\r\n}\r\n\r\ntable.tablesorter tbody tr.alt-row td {\r\n  background: #EAF2FA;\r\n  color: #3d3d3d;\r\n}\r\n\r\ntable.tablesorter tr.normal-row:hover td,\r\ntable.tablesorter tr.alt-row:hover td {\r\n  background-color: #eee;\r\n}\r\n\r\n.clickable:hover {\r\n  color: #d14;\r\n  text-decoration: underline;\r\n}\r\n\r\n.popup_block {\r\n  background: #fff none repeat scroll 0 0;\r\n  border: 5px solid #ddd;\r\n  box-shadow: 0 0 5px #000;\r\n  display: none;\r\n  font-size: 0.9em;\r\n  padding: 10px;\r\n  position: fixed;\r\n  left: 50%;\r\n  transform: translate(-50%, 0);\r\n  z-index: 1;\r\n  height: 400px;\r\n  width: 700px;\r\n  top: 30px;\r\n}\r\n\r\n#pipelinePopup {\r\n  height: 600px;\r\n  width: 90%;\r\n  font-size: 14px;\r\n}\r\n\r\n#pipelineTable {\r\n  font-size: 14px;\r\n}\r\n\r\n.popup_title {\r\n  margin-top: 0;\r\n}\r\n\r\n#addComponentToolbarPopupContent {\r\n  height: 58%;\r\n  overflow: auto;\r\n}\r\n\r\n.close,\r\n#submitComponent {\r\n  float: right;\r\n  color: black;\r\n}\r\n\r\n.fav-submit-button {\r\n  float: right;\r\n  color: black;\r\n}\r\n\r\n#methods,\r\n#vars {\r\n  float: left;\r\n  width: 50%;\r\n}\r\n\r\n#methods li,\r\n#vars li {\r\n  list-style-position: inside;\r\n  white-space: nowrap;\r\n  overflow: hidden;\r\n  text-overflow: ellipsis;\r\n}\r\n\r\n#speedbar {\r\n  float: right;\r\n  width: 210px;\r\n  margin-right: 100px;\r\n  margin-top: 100px;\r\n}\r\n\r\n#speedbar #widget {\r\n  width: 240px;\r\n  border: 1px solid #999;\r\n  font-size: 13px;\r\n  padding: 10px;\r\n}\r\n\r\n#widget i {\r\n  font-size: 11px;\r\n}\r\n\r\n#widget ul {\r\n  list-style-type: none;\r\n  padding-inline-start: 0px;\r\n  margin-block-end: 0;\r\n  margin-block-start: 0;\r\n}\r\n\r\n#widget p {\r\n  margin-top: 0;\r\n}\r\n\r\n#widget li {\r\n  margin-top: 5px;\r\n}\r\n\r\n.link {\r\n  cursor: pointer;\r\n}\r\n\r\n#pipelineTable pre {\r\n  margin: 0;\r\n}\r\n\r\n.clickable_property {\r\n  text-decoration: underline;\r\n  cursor: pointer;\r\n}\r\n\r\n/* DASH */\r\n.modal-dialog.modal-lg {\r\n  width: 60%;\r\n}\r\n\r\n.fullscreen .modal-dialog.modal-lg {\r\n  width: 95%;\r\n}\r\n\r\n#dashModal .modal-content {\r\n}\r\n\r\n#dashModal .modal-footer .tab-pane {\r\n  text-align: left;\r\n}\r\n\r\n#dashInput {\r\n  font-family: monospace;\r\n}\r\n\r\n#dashForm {\r\n  font-family: monospace;\r\n}\r\n\r\n#dashForm .tt-hint {\r\n  color: #ccc;\r\n}\r\n\r\n#dashForm .form-group {\r\n  margin-bottom: 0;\r\n}\r\n\r\n#dashEditorForm {\r\n  font-size: 14px;\r\n}\r\n\r\n#dashEditor {\r\n  resize: none; /* min-height: 100px; */\r\n}\r\n\r\n#dashScreen {\r\n  font-family: monospace;\r\n  overflow-y: auto;\r\n  max-height: 250px;\r\n  height: 250px;\r\n  margin-bottom: 15px;\r\n}\r\n\r\n.fullscreen #dashScreen {\r\n  margin-bottom: 0;\r\n  height: 100%;\r\n  max-height: 100%;\r\n}\r\n\r\n#dashScreen .alert {\r\n  padding-top: 5px;\r\n  padding-bottom: 5px;\r\n  margin-bottom: 5px;\r\n}\r\n\r\n#dashScreen pre {\r\n  background-color: inherit;\r\n  font-family: inherit;\r\n  border: 0;\r\n  color: inherit;\r\n}\r\n\r\n#dashScreen .dl-horizontal dt {\r\n  width: 80px;\r\n}\r\n\r\n#dashScreen .dl-horizontal dd {\r\n  margin-left: 90px;\r\n}\r\n\r\n.typeahead.dropdown-menu {\r\n  text-align: left;\r\n}\r\n\r\n#dashModal textarea.form-control {\r\n  height: inherit;\r\n}\r\n\r\n#dashModal panel {\r\n  background-color: white;\r\n}\r\n\r\ntable.table {\r\n  background-color: white;\r\n}\r\n\r\n/* Override dyn/admin style */\r\n.table th {\r\n  background-color: inherit;\r\n  border-style: inherit;\r\n}\r\n\r\n#dashModal .alert .btn-group {\r\n  float: right;\r\n  opacity: 0.8;\r\n}\r\n\r\n#dashModal .alert button.btn {\r\n  cursor: pointer;\r\n  opacity: 0.8;\r\n}\r\n\r\n#dashModal .alert button.btn:hover,\r\n#dashModal .alert button.btn:focus {\r\n  opacity: 1;\r\n}\r\n\r\n.printItem {\r\n  margin-top: 15px;\r\n}\r\n\r\n#dashModal .modal-footer  .panel {\r\n  margin-bottom: 0;\r\n}\r\n\r\n#dashSaveForm {\r\n  margin-bottom: 0;\r\n}\r\n\r\n.no-padding {\r\n  padding: 0 !important;\r\n}\r\n\r\n#bdaDashMenuElem .menuArrow {\r\n  padding-top: 2px;\r\n}\r\n\r\nkbd {\r\n  padding: 2px 4px;\r\n  font-size: 90%;\r\n  color: #fff;\r\n  background-color: #333;\r\n  border-radius: 3px;\r\n  -webkit-box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .25);\r\n  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .25);\r\n}\r\n\r\n#dashModal .modal-footer {\r\n  margin-top: 0;\r\n  border-top: 0;\r\n  padding: 5px 20px 5px;\r\n}\r\n\r\n#dashModal .modal-body {\r\n  padding-bottom: 0;\r\n}\r\n\r\n/* recopy bootstrap without wrapper*/\r\n.modal-backdrop.fade {\r\n  opacity: 0;\r\n  filter: alpha(opacity=0);\r\n}\r\n\r\n.fade.in {\r\n  opacity: 1;\r\n}\r\n\r\n.modal-backdrop.in {\r\n  opacity: .5;\r\n  filter: alpha(opacity=50);\r\n}\r\n\r\n.modal-backdrop {\r\n  position: fixed;\r\n  top: 0;\r\n  right: 0;\r\n  bottom: 0;\r\n  left: 0;\r\n  z-index: 1030;\r\n  background-color: #000;\r\n}\r\n\r\n.fade {\r\n  opacity: 0;\r\n  -webkit-transition: opacity .15s linear;\r\n  transition: opacity .15s linear;\r\n}\r\n\r\n#dashTips {\r\n  margin-top: 10px;\r\n  margin-bottom: 5px;\r\n}\r\n\r\n.footer-right {\r\n  cursor: pointer;\r\n}\r\n\r\n.footer-right a {\r\n  border: 1px solid transparent;\r\n}\r\n\r\n/** CACHE STATS **/\r\ntable.cache {\r\n  border-spacing: 0;\r\n  border-collapse: collapse;\r\n}\r\n\r\n.cache tr.cache-subheader {\r\n  cursor: pointer;\r\n}\r\n\r\n.cache td,\r\n.cache th {\r\n  padding: 6px;\r\n}\r\n\r\n.cache td,\r\n.cache th {\r\n  border: 1px solid #ddd;\r\n}\r\n\r\nbutton.cache {\r\n  cursor: pointer;\r\n}\r\n\r\n.fixed_headers {\r\n  table-layout: fixed;\r\n  width: 100%;\r\n}\r\n\r\n.fixed_headers thead {\r\n  width: 100%;\r\n}\r\n\r\n.fixed_headers thead th {\r\n  font-size: 12px;\r\n  font-weight: 500;\r\n  padding: 2px;\r\n  overflow: hidden;\r\n}\r\n\r\n.fixed_headers th,\r\n.fixed_headers td {\r\n  width: 4%;\r\n}\r\n\r\n.fixed_headers.oldDynamo th,\r\n.fixed_headers.oldDynamo td {\r\n  width: 5.3%;\r\n}\r\n\r\n/*.fixed_headers .sticky-top thead {\r\n  display: block;\r\n}\r\n.fixed_headers .sticky-top tbody {\r\n  display: block;\r\n\r\n}*/\r\n.sticky-top {\r\n  position: fixed;\r\n  top: 0;\r\n}\r\n\r\n.scroller {\r\n  scroll-snap-type: proximity;\r\n}\r\n\r\n.snap {\r\n  scroll-snap-align: start none;\r\n  scroll-snap-padding: 25px 0 0 0;\r\n}\r\n\r\n/*.old_ie_wrapper {\r\n  overflow-x: hidden;\r\n  overflow-y: auto;\r\n  tbody { height: auto; }\r\n}*/\r\n\r\n/* SCHEDULER */\r\n\r\n#timeline-wrapper {\r\n  margin-bottom: 20px;\r\n}\r\n\r\n.twbs caption {\r\n  padding-top: 8px;\r\n  padding-bottom: 8px;\r\n  color: #777;\r\n  text-align: left;\r\n}\r\n\r\n/* XML DEF */\r\n#xmlDefAsTable {\r\n  margin-top: 15px;\r\n  /* for whatever reason on some pages\r\n  the whole section is inside an <a> tag\r\n  on native dyn/admin : need to reset color*/\r\n  color: black;\r\n}\r\n\r\n.item-descriptor-heading,\r\n.table-def {\r\n  text-transform: capitalize;\r\n  cursor: pointer;\r\n}\r\n\r\n#xmlDefAsTable .item-panel .panel-heading {\r\n  background-color: #dff0d8;\r\n}\r\n\r\n.subtableHeader {\r\n  background-color: #f5f5f5;\r\n  text-transform: capitalize;\r\n  font-weight: 600;\r\n}\r\n\r\n.item-panel .panel-heading {\r\n  padding: 10px;\r\n}\r\n\r\n/* Remove pading top/bot */\r\n.item-panel .panel-body {\r\n  padding: 0 15px;\r\n}\r\n\r\n.item-panel .row > [class^="col-"] {\r\n  padding: 10px;\r\n  border-right: 1px solid #ddd;\r\n}\r\n\r\n.table-def [class^="col-"] {\r\n  text-transform: none;\r\n  background-color: #d9edf7;\r\n}\r\n\r\n.item-panel .highlight {\r\n  background-color: yellow;\r\n}\r\n\r\n.item-panel .property:hover {\r\n  background-color: #f5f5f5;\r\n}\r\n\r\n#quickNavLinks {\r\n  margin-top: 10px;\r\n  max-height: 400px;\r\n  overflow-y: auto;\r\n  overflow-x: hidden;\r\n}\r\n\r\n#xmlDefQuickNav .btn.sorted{\r\n  background-color: #dff0d8;\r\n}\r\n\r\n#xmlDefQuickNav h3.panel-title {\r\n  padding-top: 4px;\r\n}\r\n\r\n#definitionsContainer {\r\n  max-width: inherit;\r\n}\r\n\r\n#quickNavLinks .nav > li > a {\r\n  padding: 5px 15px\r\n}\r\n\r\n#xmlDefSearchBox {\r\n  font-size: 0.9em;\r\n}\r\n\r\nol.itemDescAttributes {\r\n  text-transform: none;\r\n  margin: 0;\r\n  padding: 0;\r\n  font-weight: 500;\r\n}\r\n\r\n.itemDescAttributes > li {\r\n  display: inline-block;\r\n  padding-right: 5px;\r\n}\r\n\r\n.itemDescAttributes > li + li:before {\r\n  content: "/\\00a0";\r\n  padding: 0 5px;\r\n  color: #cccccc;\r\n}\r\n\r\n.attr-value {\r\n  font-weight: 600;\r\n}\r\n\r\n.table-name {\r\n  font-weight: 600;\r\n  text-transform: none;\r\n}\r\n\r\n.property-type,\r\n.enum,\r\n.derivation {\r\n  text-decoration: underline;\r\n}\r\n\r\n.bda-attr {\r\n  display: inline-block;\r\n  padding: 2px 8px;\r\n  margin: 2px 3px;\r\n  border-radius: 10px;\r\n  font-size: 11px;\r\n  font-weight: 500;\r\n  background: #e9ecef;\r\n  color: #6c757d;\r\n}\r\n.bda-attr-true {\r\n  background: #d1e7dd;\r\n  color: #0f5132;\r\n}\r\n\r\n.data-type,\r\n.component-data-type {\r\n  text-transform: capitalize;\r\n}\r\n\r\n.row.subtableHeader .col-lg-05{\r\n  padding-left: 0;\r\n  padding-right: 0;\r\n  font-size: 8px;\r\n  text-align: center;\r\n}\r\n\r\n#xmlDefAsTable .tooltip-inner {\r\n  max-width: inherit;\r\n}\r\n\r\n#xmlDefAsTable  .popover ul {\r\n  padding-left: 10px;\r\n}\r\n\r\n#xmlDefAsTable .popover{\r\n  max-width: inherit;\r\n  width: 600px;\r\n  width: intrinsic;           /* Safari/WebKit uses a non-standard name */\r\n  width: -moz-max-content;    /* Firefox/Gecko */\r\n  width: -webkit-max-content; /* Chrome */\r\n}\r\n\r\n/*\r\n.item-panel [class^="col-"] {\r\n    background-color: rgba(86,61,124,.15);\r\n    border: 1px solid rgba(86,61,124,.2);\r\n}\r\n*/\r\n\r\n/** AUTOCOMPLETE **/\r\n\r\n#searchField {\r\n  width: 300px;\r\n}\r\n\r\n/** extend grid system**/\r\n\r\n/** 0.5 **/\r\n.twbs .col-xs-05,\r\n.twbs .col-sm-05,\r\n.twbs .col-md-05,\r\n.twbs .col-lg-05 {\r\n  width: 4.166666665%;\r\n  position: relative;\r\n  min-height: 1px;\r\n  padding-left: 15px;\r\n  padding-right: 15px;\r\n  float: left;\r\n}\r\n.notifyjs-bootstrap-base {\r\n  font-size: 12px;\r\n}\r\n\r\n.legend {\r\n  display : inline-block;\r\n  color : white;\r\n  border-radius : 5px;\r\n  font-size : 11px;\r\n  padding : 3px;\r\n  margin : 5px;\r\n}\r\n\r\n#treePopup {\r\n  height: 90%;\r\n  width: 95%;\r\n  overflow: hidden;\r\n}\r\n\r\n.flexContainer {\r\n  display:flex;\r\n  height: 100%;\r\n}\r\n\r\n#treeInfo {\r\n  display:none;\r\n  float:left;\r\n}\r\n\r\n#treeContainer  {\r\n  height: 100%;\r\n  flex : 1;\r\n}\r\n';
+  const bdaCss = `/* =============================================================================\r
+   BDA Design Tokens\r
+   ============================================================================= */\r
+:root {\r
+  /* --- Brand --- */\r
+  --bda-brand:              #007bb8;\r
+  --bda-brand-dark:         #00486c;\r
+  --bda-whatsnew:           #62a03e;\r
+  --bda-whatsnew-border:    #44702b;\r
+\r
+  /* --- Accent (interactive elements) --- */\r
+  --bda-accent:             #2563eb;\r
+  --bda-accent-hover:       #1d4ed8;\r
+  --bda-accent-active:      #1e40af;\r
+  --bda-accent-subtle:      #dbeafe;\r
+\r
+  /* --- Semantic --- */\r
+  --bda-success:            #16a34a;\r
+  --bda-success-bg:         #d1e7dd;\r
+  --bda-success-text:       #0f5132;\r
+  --bda-success-light:      #dff0d8;\r
+  --bda-danger:             #dc2626;\r
+  --bda-danger-dark:        #880000;\r
+  --bda-warning:            #d97706;\r
+\r
+  /* --- Neutrals (light → dark) --- */\r
+  --bda-white:              #ffffff;\r
+  --bda-surface:            #f8f9fb;   /* subtle backgrounds, toolbars */\r
+  --bda-surface-raised:     #f1f3f5;   /* table headers, elevated surfaces */\r
+  --bda-surface-hover:      #e9ecef;   /* hover state backgrounds */\r
+  --bda-border-subtle:      #e0e0e0;   /* very light borders */\r
+  --bda-border:             #dee2e6;   /* standard borders */\r
+  --bda-border-input:       #ced4da;   /* form element borders */\r
+  --bda-border-muted:       #adb5bd;   /* muted / secondary borders */\r
+  --bda-text-subtle:        #6c757d;   /* tertiary / placeholder text */\r
+  --bda-text-muted:         #495057;   /* secondary body text */\r
+  --bda-text:               #212529;   /* primary body text */\r
+  --bda-text-strong:        #111827;   /* headings, selected state */\r
+  --bda-black:              #000000;\r
+\r
+  /* --- Typography --- */\r
+  --bda-font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;\r
+  --bda-font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;\r
+  --bda-font-size-xs:   11px;\r
+  --bda-font-size-sm:   12px;\r
+  --bda-font-size-base: 13px;\r
+  --bda-font-size-md:   14px;\r
+\r
+  /* --- Border radius --- */\r
+  --bda-radius-sm:  3px;\r
+  --bda-radius:     4px;\r
+  --bda-radius-md:  6px;\r
+  --bda-radius-lg:  10px;\r
+\r
+  /* --- Shadows --- */\r
+  --bda-shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.06);\r
+  --bda-shadow:     0 0 5px rgba(0, 0, 0, 0.25);\r
+\r
+  /* --- Transitions --- */\r
+  --bda-transition: all 0.15s ease;\r
+}\r
+\r
+/* Dark mode overrides — apply .bda-dark to <body> or a wrapper */\r
+.bda-dark {\r
+  --bda-white:           #1e2124;\r
+  --bda-surface:         #23272b;\r
+  --bda-surface-raised:  #2c3034;\r
+  --bda-surface-hover:   #343a40;\r
+  --bda-border-subtle:   #3a3f44;\r
+  --bda-border:          #444c55;\r
+  --bda-border-input:    #555e68;\r
+  --bda-border-muted:    #6c757d;\r
+  --bda-text-subtle:     #8c9aab;\r
+  --bda-text-muted:      #a8b4c0;\r
+  --bda-text:            #dde2e8;\r
+  --bda-text-strong:     #f0f3f6;\r
+  --bda-black:           #f8f9fa;\r
+  --bda-accent-subtle:   #1e3a5f;\r
+  --bda-success-light:   #0a2e1a;\r
+}\r
+\r
+/* =============================================================================\r
+   Global\r
+   ============================================================================= */\r
+body {\r
+  padding-left: 15px;\r
+  padding-top: 48px;\r
+}\r
+\r
+tr.even td {\r
+  background-color: var(--bda-white);\r
+}\r
+\r
+#itemTreeId {\r
+  width: 100px;\r
+}\r
+\r
+#itemTreeMax {\r
+  width: 40px;\r
+}\r
+\r
+a {\r
+  text-decoration: none\r
+}\r
+\r
+.fa-pencil-square-o {\r
+  cursor: pointer;\r
+}\r
+\r
+/* =============================================================================\r
+   RQL Toolbar\r
+   ============================================================================= */\r
+#RQLToolbar {\r
+  margin-bottom: 12px;\r
+  padding: 10px 14px;\r
+  background: var(--bda-surface);\r
+  border: 1px solid var(--bda-border-subtle);\r
+  border-radius: var(--bda-radius-md);\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+  flex-wrap: wrap;\r
+  width: fit-content;\r
+}\r
+\r
+/* =============================================================================\r
+   Select2 overrides\r
+   ============================================================================= */\r
+.select2-container .select2-choices .select2-search-field input,\r
+.select2-container .select2-choice,\r
+.select2-container .select2-choices {\r
+  font-family: var(--bda-font-sans);\r
+  font-size: var(--bda-font-size-base);\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.select2-chosen,\r
+.select2-choice > span:first-child,\r
+.select2-container .select2-choices .select2-search-field input {\r
+  padding: 4px 6px;\r
+}\r
+\r
+#select2-drop {\r
+  font-size: var(--bda-font-size-base);\r
+}\r
+\r
+.select2-container .select2-choice {\r
+  height: 24px;\r
+}\r
+\r
+.select2-container .select2-choice .select2-arrow b,\r
+.select2-container .select2-choice div b {\r
+  background-position: 0 0;\r
+}\r
+\r
+.select2-results {\r
+  max-height: 220px;\r
+}\r
+\r
+/* =============================================================================\r
+   RQL Buttons (positional overrides — base styles from .bda-btn)\r
+   ============================================================================= */\r
+#RQLAdd {\r
+  margin-left: 10px;\r
+}\r
+\r
+#RQLResults {\r
+  margin-top: 10px;\r
+  overflow-x: auto;\r
+}\r
+\r
+#RQLResults .dataTable thead th {\r
+  position: sticky;\r
+  top: 0;\r
+  background: var(--bda-bg);\r
+  z-index: 1;\r
+  box-shadow: 0 1px 0 var(--bda-border);\r
+}\r
+\r
+/* =============================================================================\r
+   RQL Log\r
+   ============================================================================= */\r
+#RQLLog {\r
+  overflow-x: hidden;\r
+  max-height: 100px;\r
+  padding: 8px 12px;\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-md);\r
+  width: 800px;\r
+  white-space: pre-wrap;\r
+  font-family: var(--bda-font-mono);\r
+  font-size: var(--bda-font-size-sm);\r
+  background: var(--bda-surface);\r
+  color: var(--bda-text-muted);\r
+}\r
+\r
+#rawXml {\r
+  display: none;\r
+  margin: 0px;\r
+  padding: 0px;\r
+}\r
+\r
+/* =============================================================================\r
+   Data Table\r
+   ============================================================================= */\r
+.dataTable {\r
+  font-size: var(--bda-font-size-base);\r
+  margin: 5px;\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-md);\r
+  z-index: 10;\r
+  position: relative;\r
+  background-color: var(--bda-white);\r
+  border-collapse: separate;\r
+  border-spacing: 0;\r
+  overflow: hidden;\r
+}\r
+\r
+.prop_name {\r
+  font-size: 80%;\r
+}\r
+\r
+/* Badge — .bda-badge\r
+   ============================================================================= */\r
+.bda-badge {\r
+  display: inline-block;\r
+  padding: 2px 7px;\r
+  border-radius: var(--bda-radius-lg);\r
+  font-size: var(--bda-font-size-xs);\r
+  font-weight: 700;\r
+  line-height: 1.5;\r
+  text-align: center;\r
+  white-space: nowrap;\r
+  vertical-align: middle;\r
+}\r
+\r
+.bda-badge--danger {\r
+  background: #fee2e2;\r
+  color: var(--bda-danger);\r
+}\r
+\r
+.bda-badge--success {\r
+  background: var(--bda-success-bg);\r
+  color: var(--bda-success-text);\r
+}\r
+\r
+.bda-badge--accent {\r
+  background: var(--bda-accent-subtle);\r
+  color: var(--bda-accent-active);\r
+}\r
+\r
+.bda-badge--neutral {\r
+  background: var(--bda-surface-raised);\r
+  color: var(--bda-text-subtle);\r
+}\r
+\r
+/* Legacy aliases for backward compat */\r
+.prop_attr {\r
+  display: inline-block;\r
+  margin: 2px;\r
+  padding: 1px;\r
+  color: var(--bda-white);\r
+  vertical-align: middle;\r
+}\r
+\r
+.prop_attr_red {\r
+  background-color: var(--bda-danger);\r
+}\r
+\r
+.prop_attr_blue {\r
+  background-color: var(--bda-accent);\r
+}\r
+\r
+.prop_attr_green {\r
+  background-color: var(--bda-success);\r
+}\r
+\r
+.copyLink {\r
+  text-decoration: none;\r
+  color: var(--bda-accent-active);\r
+}\r
+\r
+.copyField {\r
+  width: 200px;\r
+  display: none;\r
+}\r
+\r
+.dataTable td,\r
+.dataTable th {\r
+  padding: 6px 10px;\r
+}\r
+\r
+.dataTable th {\r
+  min-width: 160px;\r
+  text-align: left;\r
+  background: var(--bda-surface-raised);\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-text-muted);\r
+  border-bottom: 2px solid var(--bda-border);\r
+}\r
+\r
+/* =============================================================================\r
+   Form inputs\r
+   ============================================================================= */\r
+#itemId {\r
+  width: 125px;\r
+  height: 28px;\r
+  padding: 4px 8px;\r
+  border: 1px solid var(--bda-border-input);\r
+  border-radius: var(--bda-radius);\r
+  font-size: var(--bda-font-size-base);\r
+}\r
+\r
+#splitValue {\r
+  padding: 4px 8px;\r
+  border: 1px solid var(--bda-border-input);\r
+  border-radius: var(--bda-radius);\r
+  font-size: var(--bda-font-size-base);\r
+}\r
+\r
+/* =============================================================================\r
+   Input — .bda-input\r
+   ============================================================================= */\r
+.bda-input {\r
+  height: 28px;\r
+  padding: 4px 8px;\r
+  border: 1px solid var(--bda-border-input);\r
+  border-radius: var(--bda-radius);\r
+  font-size: var(--bda-font-size-base);\r
+  font-family: inherit;\r
+  color: var(--bda-text);\r
+  background: var(--bda-white);\r
+  transition: border-color 0.15s, box-shadow 0.15s;\r
+  outline: none;\r
+  vertical-align: middle;\r
+}\r
+\r
+.bda-input:focus {\r
+  border-color: var(--bda-accent);\r
+  box-shadow: 0 0 0 3px var(--bda-accent-subtle);\r
+}\r
+\r
+/* =============================================================================\r
+   Table — .bda-table\r
+   ============================================================================= */\r
+.bda-table {\r
+  border-collapse: separate;\r
+  border-spacing: 0;\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-md);\r
+  overflow: hidden;\r
+  font-size: var(--bda-font-size-base);\r
+  background: var(--bda-white);\r
+  width: 100%;\r
+}\r
+\r
+.bda-table th {\r
+  background: var(--bda-surface-raised);\r
+  color: var(--bda-text-muted);\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-sm);\r
+  text-transform: uppercase;\r
+  letter-spacing: 0.3px;\r
+  padding: 8px 12px;\r
+  border-bottom: 2px solid var(--bda-border);\r
+  position: sticky;\r
+  top: 0;\r
+  z-index: 1;\r
+  text-align: left;\r
+  white-space: nowrap;\r
+}\r
+\r
+.bda-table td {\r
+  padding: 6px 12px;\r
+  border-bottom: 1px solid var(--bda-surface-hover);\r
+  vertical-align: middle;\r
+}\r
+\r
+.bda-table tbody tr:nth-child(odd) td {\r
+  background: var(--bda-surface);\r
+}\r
+\r
+.bda-table tbody tr:hover td {\r
+  background: var(--bda-accent-subtle);\r
+}\r
+\r
+/* =============================================================================\r
+   Descriptor Table\r
+   ============================================================================= */\r
+.descriptor {\r
+  margin: 5px 10px 5px 5px;\r
+}\r
+\r
+.descriptorTable {\r
+  float: left;\r
+  margin-right: 10px;\r
+  margin-bottom: 10px;\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-md);\r
+  white-space: nowrap;\r
+  overflow: hidden;\r
+  font-size: var(--bda-font-size-base);\r
+}\r
+\r
+.descriptorTable th {\r
+  background: var(--bda-surface-raised);\r
+  color: var(--bda-text-muted);\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-sm);\r
+  text-transform: uppercase;\r
+  letter-spacing: 0.3px;\r
+  padding: 8px 10px;\r
+}\r
+\r
+.descriptorTable td {\r
+  padding: 5px 8px;\r
+}\r
+\r
+/* =============================================================================\r
+   CodeMirror\r
+   ============================================================================= */\r
+#RQLText .CodeMirror {\r
+  border: 1px solid var(--bda-border-input);\r
+  border-radius: var(--bda-radius-md);\r
+  height: 355px;\r
+  width: 800px;\r
+  cursor: text;\r
+  font-size: var(--bda-font-size-base);\r
+}\r
+\r
+#RQLText {\r
+  display: inline-block;\r
+  vertical-align: top;\r
+}\r
+\r
+.xmlDefinition .CodeMirror {\r
+  border: 1px solid var(--bda-surface-hover);\r
+  height: auto;\r
+}\r
+\r
+.xmlDefinition .CodeMirror-scroll {\r
+  overflow-y: hidden;\r
+  overflow-x: auto;\r
+}\r
+\r
+/* =============================================================================\r
+   Button System — .bda-btn\r
+   ============================================================================= */\r
+.bda-btn {\r
+  display: inline-block;\r
+  padding: 5px 12px;\r
+  border: 1px solid var(--bda-border-input);\r
+  border-radius: var(--bda-radius);\r
+  background: var(--bda-white);\r
+  color: var(--bda-text-muted);\r
+  font-size: var(--bda-font-size-base);\r
+  font-family: inherit;\r
+  cursor: pointer;\r
+  transition: var(--bda-transition);\r
+  text-decoration: none;\r
+  line-height: 1.4;\r
+  white-space: nowrap;\r
+  vertical-align: middle;\r
+}\r
+\r
+.bda-btn:hover,\r
+.bda-btn:focus {\r
+  background: var(--bda-surface-hover);\r
+  border-color: var(--bda-border-muted);\r
+  color: var(--bda-text);\r
+  text-decoration: none;\r
+  outline: none;\r
+}\r
+\r
+.bda-btn--primary {\r
+  background: var(--bda-accent);\r
+  color: var(--bda-white);\r
+  border-color: var(--bda-accent);\r
+}\r
+\r
+.bda-btn--primary:hover,\r
+.bda-btn--primary:focus {\r
+  background: var(--bda-accent-hover);\r
+  border-color: var(--bda-accent-active);\r
+  color: var(--bda-white);\r
+}\r
+\r
+.bda-btn--danger {\r
+  color: var(--bda-danger-dark);\r
+  border-color: var(--bda-danger);\r
+}\r
+\r
+.bda-btn--danger:hover,\r
+.bda-btn--danger:focus {\r
+  background: var(--bda-danger);\r
+  color: var(--bda-white);\r
+  border-color: var(--bda-danger-dark);\r
+}\r
+\r
+.bda-btn--sm {\r
+  padding: 3px 8px;\r
+  font-size: var(--bda-font-size-sm);\r
+}\r
+\r
+.bda-btn--icon {\r
+  padding: 4px 6px;\r
+  line-height: 1;\r
+}\r
+\r
+#repoToolbar {\r
+  margin-bottom: 20px;\r
+}\r
+\r
+.showMore {\r
+  font-size: 80%;\r
+}\r
+\r
+/* =============================================================================\r
+   Stored Queries / Properties tabs\r
+   ============================================================================= */\r
+.storedQueriesTitle {\r
+  font-size: var(--bda-font-size-base);\r
+  font-weight: bold;\r
+}\r
+\r
+#tabs {\r
+  display: inline-block;\r
+  vertical-align: top;\r
+  margin-left: 5px;\r
+  max-width: calc(100% - 820px);\r
+}\r
+\r
+#tabs i {\r
+  font-size: 80%;\r
+}\r
+\r
+/* =============================================================================\r
+   Tabs — .bda-tabs / .bda-tabs__item\r
+   ============================================================================= */\r
+.bda-tabs {\r
+  list-style: none;\r
+  margin: 0;\r
+  overflow: hidden;\r
+  padding: 0;\r
+  display: flex;\r
+  gap: 2px;\r
+}\r
+\r
+.bda-tabs__item {\r
+  padding: 6px 16px;\r
+  font-size: var(--bda-font-size-base);\r
+  font-weight: 500;\r
+  cursor: pointer;\r
+  background: var(--bda-surface-raised);\r
+  color: var(--bda-text-muted);\r
+  border: 1px solid var(--bda-border);\r
+  border-bottom: none;\r
+  border-radius: var(--bda-radius-md) var(--bda-radius-md) 0 0;\r
+  transition: background-color 0.15s, color 0.15s;\r
+  user-select: none;\r
+}\r
+\r
+.bda-tabs__item:hover {\r
+  background: var(--bda-surface-hover);\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.bda-tabs__item--active {\r
+  background: var(--bda-white);\r
+  color: var(--bda-text-strong);\r
+  border-bottom: 1px solid var(--bda-white);\r
+  margin-bottom: -1px;\r
+}\r
+\r
+#descProperties {\r
+  display: none;\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: 0 var(--bda-radius-md) var(--bda-radius-md) var(--bda-radius-md);\r
+  max-height: 320px;\r
+  overflow: auto;\r
+  background: var(--bda-white);\r
+  box-shadow: var(--bda-shadow-sm);\r
+}\r
+\r
+#descProperties tbody tr:nth-child(odd) {\r
+  background-color: var(--bda-surface);\r
+}\r
+\r
+#descProperties tbody tr:hover {\r
+  background-color: var(--bda-accent-subtle);\r
+}\r
+\r
+#descProperties table {\r
+  font-size: var(--bda-font-size-base);\r
+  border: none;\r
+  border-collapse: collapse;\r
+  width: 100%;\r
+}\r
+\r
+#descProperties th {\r
+  background: var(--bda-surface-raised);\r
+  color: var(--bda-text-muted);\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-sm);\r
+  text-transform: uppercase;\r
+  letter-spacing: 0.3px;\r
+  padding: 8px 10px;\r
+  border-bottom: 2px solid var(--bda-border);\r
+  position: sticky;\r
+  top: 0;\r
+  z-index: 1;\r
+}\r
+\r
+#descProperties td {\r
+  padding: 6px 10px;\r
+  border-bottom: 1px solid var(--bda-surface-hover);\r
+  vertical-align: middle;\r
+}\r
+\r
+.propQueryBtn {\r
+  color: var(--bda-text);\r
+  text-decoration: none;\r
+  cursor: pointer;\r
+  border-bottom: 1px dashed var(--bda-border-muted);\r
+}\r
+\r
+.propQueryBtn:hover {\r
+  color: var(--bda-accent);\r
+  border-bottom-color: var(--bda-accent);\r
+}\r
+\r
+/* =============================================================================\r
+   Enum badges\r
+   ============================================================================= */\r
+.bda-enum-toggle {\r
+  cursor: pointer;\r
+  color: var(--bda-accent);\r
+  font-weight: 500;\r
+}\r
+\r
+.bda-enum-toggle:hover {\r
+  color: var(--bda-accent-active);\r
+}\r
+\r
+.bda-enum-values {\r
+  display: none;\r
+  margin-top: 4px;\r
+  max-width: 160px;\r
+}\r
+\r
+.bda-enum-value {\r
+  display: inline-block;\r
+  padding: 1px 6px;\r
+  margin: 1px 2px;\r
+  border-radius: var(--bda-radius-lg);\r
+  font-size: 10px;\r
+  background: var(--bda-surface-hover);\r
+  color: var(--bda-text-muted);\r
+}\r
+\r
+.showQueriesLabel {\r
+  font-size: 80%;\r
+  margin: 0px;\r
+  padding: 5px 0px 0px 0px;\r
+}\r
+\r
+#storedQueries {\r
+  display: inline-block;\r
+  vertical-align: top;\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: 0 var(--bda-radius-md) var(--bda-radius-md) var(--bda-radius-md);\r
+  min-width: 350px;\r
+  max-height: 320px;\r
+  background: var(--bda-white);\r
+  box-shadow: var(--bda-shadow-sm);\r
+  padding: 8px;\r
+  overflow: auto;\r
+}\r
+\r
+.error {\r
+  color: var(--bda-danger);\r
+}\r
+\r
+#RQLSave {\r
+  margin: 5px;\r
+}\r
+\r
+.queryView {\r
+  display: none;\r
+}\r
+\r
+.previewQuery {\r
+  margin-top: 5px;\r
+  margin-left: 10px;\r
+  cursor: pointer;\r
+}\r
+\r
+.deleteQuery {\r
+  margin-top: 5px;\r
+  margin-left: 10px;\r
+  cursor: pointer;\r
+}\r
+\r
+/* =============================================================================\r
+   Navbar — #bdaNavbar\r
+   ============================================================================= */\r
+#bdaNavbar {\r
+  position: fixed;\r
+  top: 0;\r
+  left: 0;\r
+  right: 0;\r
+  height: 44px;\r
+  background: var(--bda-white);\r
+  border-bottom: 1px solid var(--bda-border);\r
+  display: flex;\r
+  align-items: center;\r
+  padding: 0 12px;\r
+  z-index: 8000;\r
+  gap: 8px;\r
+  box-shadow: var(--bda-shadow-sm);\r
+}\r
+\r
+.bda-nav__brand {\r
+  font-weight: 700;\r
+  font-size: var(--bda-font-size-md);\r
+  color: var(--bda-accent);\r
+  letter-spacing: 0.5px;\r
+  padding: 0 4px;\r
+  white-space: nowrap;\r
+}\r
+\r
+.bda-nav__left {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 10px;\r
+  flex: 1;\r
+  min-width: 0;\r
+}\r
+\r
+.bda-nav__search {\r
+  display: flex;\r
+  align-items: center;\r
+  margin: 0;\r
+}\r
+\r
+.bda-nav__search input {\r
+  height: 28px;\r
+  padding: 4px 10px;\r
+  border: 1px solid var(--bda-border-input);\r
+  border-radius: var(--bda-radius);\r
+  font-size: var(--bda-font-size-base);\r
+  font-family: inherit;\r
+  color: var(--bda-text);\r
+  background: var(--bda-surface);\r
+  transition: border-color 0.15s, box-shadow 0.15s;\r
+  outline: none;\r
+  width: 220px;\r
+}\r
+\r
+.bda-nav__search input:focus {\r
+  border-color: var(--bda-accent);\r
+  box-shadow: 0 0 0 3px var(--bda-accent-subtle);\r
+  background: var(--bda-white);\r
+}\r
+\r
+.bda-nav__right {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 2px;\r
+  flex-shrink: 0;\r
+}\r
+\r
+.bda-nav__item {\r
+  position: relative;\r
+}\r
+\r
+.bda-nav__btn {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 5px;\r
+  height: 32px;\r
+  padding: 0 10px;\r
+  background: transparent;\r
+  border: 1px solid transparent;\r
+  border-radius: var(--bda-radius);\r
+  color: var(--bda-text-muted);\r
+  font-size: var(--bda-font-size-sm);\r
+  font-family: inherit;\r
+  cursor: pointer;\r
+  white-space: nowrap;\r
+  transition: var(--bda-transition);\r
+}\r
+\r
+.bda-nav__btn:hover,\r
+.bda-nav__btn--active {\r
+  background: var(--bda-surface-raised);\r
+  border-color: var(--bda-border-subtle);\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.bda-nav__dropdown {\r
+  display: none;\r
+  position: absolute;\r
+  top: calc(100% + 6px);\r
+  right: 0;\r
+  min-width: 280px;\r
+  max-height: 80vh;\r
+  overflow-y: auto;\r
+  background: var(--bda-white);\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-md);\r
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);\r
+  padding: 12px;\r
+  z-index: 8500;\r
+  color: var(--bda-text);\r
+  font-size: var(--bda-font-size-sm);\r
+}\r
+\r
+.bda-nav__dropdown--open {\r
+  display: block;\r
+}\r
+\r
+.bda-nav__dropdown a {\r
+  color: var(--bda-accent);\r
+  text-decoration: underline;\r
+}\r
+\r
+.bda-nav__dropdown p {\r
+  margin-top: 0;\r
+}\r
+\r
+.bda-nav__dropdown textarea {\r
+  width: 100%;\r
+  box-sizing: border-box;\r
+}\r
+\r
+#whatsnewDropdown {\r
+  min-width: 340px;\r
+}\r
+\r
+#history {\r
+  padding: 4px 0 8px;\r
+}\r
+\r
+.bda-history-list {\r
+  display: flex;\r
+  flex-wrap: wrap;\r
+  gap: 6px;\r
+  align-items: center;\r
+}\r
+\r
+.bda-history-pill {\r
+  display: inline-flex;\r
+  align-items: center;\r
+  padding: 2px 10px;\r
+  border-radius: 999px;\r
+  font-size: var(--bda-font-size-sm);\r
+  background: var(--bda-surface);\r
+  border: 1px solid var(--bda-border);\r
+  color: var(--bda-text-muted);\r
+  text-decoration: none;\r
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;\r
+}\r
+\r
+.bda-history-pill:hover {\r
+  background: var(--bda-border-subtle);\r
+  border-color: var(--bda-border-muted);\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+#toolbar {\r
+  display: flex;\r
+  flex-wrap: wrap;\r
+  gap: 8px;\r
+  padding: 8px 0;\r
+  align-items: flex-start;\r
+}\r
+\r
+.toolbar-elem {\r
+  /* flex child — no float */\r
+}\r
+\r
+/* =============================================================================\r
+   Favorites\r
+   ============================================================================= */\r
+.newFav {\r
+  display: flex;\r
+  align-items: center;\r
+  justify-content: center;\r
+}\r
+\r
+#favTagList {\r
+  margin-top: 4px;\r
+}\r
+\r
+#favSetTags {\r
+  margin-bottom: 5px;\r
+}\r
+\r
+\r
+.tag-filter {\r
+  cursor: pointer;\r
+}\r
+\r
+.tag-filter label {\r
+  margin-left: 5px;\r
+  cursor: pointer;\r
+}\r
+\r
+.favline {\r
+  margin-bottom: 5px;\r
+  display: block;\r
+}\r
+\r
+.favline ul {\r
+  margin: 0;\r
+  padding: 0;\r
+  list-style-type: none;\r
+  width: 100%;\r
+  overflow-x: auto;\r
+  white-space: nowrap;\r
+}\r
+\r
+.favline div {\r
+  display: inline-block;\r
+}\r
+\r
+.favline li {\r
+  display: inline-block;\r
+  list-style: none; /* pour enlever les puces sur IE7 */\r
+  margin: 2px;\r
+}\r
+\r
+.bda-tag-pill {\r
+  display: inline-flex;\r
+  align-items: center;\r
+  gap: 4px;\r
+  padding: 2px 10px;\r
+  border-radius: 999px;\r
+  font-size: var(--bda-font-size-sm);\r
+  border: 1px solid var(--bda-border);\r
+  background: var(--bda-surface);\r
+  color: var(--bda-text-muted);\r
+  cursor: pointer;\r
+  user-select: none;\r
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;\r
+}\r
+\r
+.bda-tag-pill:hover {\r
+  border-color: var(--bda-border-muted);\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.bda-tag-pill--active {\r
+  background: rgba(66, 133, 244, 0.1);\r
+  border-color: #4285f4;\r
+  color: #4285f4;\r
+}\r
+\r
+.bda-tag-pill input[type='checkbox'] {\r
+  display: none;\r
+}\r
+\r
+.bda-tag-pill label {\r
+  cursor: pointer;\r
+  margin: 0;\r
+}\r
+\r
+.newtags {\r
+  width: 85%;\r
+}\r
+\r
+.fav-color-bar {\r
+  height: 4px;\r
+  width: 100%;\r
+  border-radius: var(--bda-radius-md) var(--bda-radius-md) 0 0;\r
+}\r
+\r
+.fav {\r
+  min-width: 90px;\r
+  max-width: 140px;\r
+  background: var(--bda-white);\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-md);\r
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);\r
+  overflow: hidden;\r
+  display: flex;\r
+  flex-direction: column;\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.fav a {\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.favLink {\r
+  text-align: center;\r
+  padding: 6px 8px 4px;\r
+  line-height: 16px;\r
+  flex: 1;\r
+}\r
+\r
+.favLink a,\r
+.logdebug {\r
+  color: var(--bda-text-strong);\r
+  text-decoration: none;\r
+}\r
+\r
+.favName {\r
+  display: block;\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-text-muted);\r
+  margin-top: 1px;\r
+}\r
+\r
+.favArrow {\r
+  text-align: center;\r
+  cursor: pointer;\r
+  padding: 4px;\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-text-muted);\r
+  border-top: 1px solid var(--bda-border-subtle);\r
+  transition: color 0.15s ease;\r
+}\r
+\r
+.favArrow:hover {\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.fav-tags {\r
+  color: var(--bda-text-muted);\r
+  margin-top: 2px;\r
+  font-size: var(--bda-font-size-xs);\r
+}\r
+\r
+.favTitle {\r
+  font-size: var(--bda-font-size-sm);\r
+  font-weight: 600;\r
+  margin-bottom: 2px;\r
+  text-align: center;\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.favMoreInfo {\r
+  font-size: var(--bda-font-size-xs);\r
+  display: none;\r
+  padding: 6px 8px;\r
+  text-align: left;\r
+  border-top: 1px solid var(--bda-border-subtle);\r
+}\r
+\r
+.favDelete {\r
+  cursor: pointer;\r
+  color: var(--bda-danger, #dc3545);\r
+  margin-top: 4px;\r
+}\r
+\r
+.favLogDebug form {\r
+  margin: 0;\r
+}\r
+\r
+.favLogDebug {\r
+  margin-bottom: 2px;\r
+  margin-top: 2px;\r
+}\r
+\r
+\r
+#oracleATGbrand {\r
+  width: 120px;\r
+  cursor: pointer;\r
+}\r
+\r
+/* =============================================================================\r
+   Misc\r
+   ============================================================================= */\r
+#xmlHighlight {\r
+  margin-bottom: 0px;\r
+}\r
+\r
+#rawXml pre {\r
+  margin: 0;\r
+}\r
+\r
+#sqltext {\r
+  display: block;\r
+}\r
+\r
+#curDataSourceName {\r
+  font-weight: bold;\r
+}\r
+\r
+#sqlResult {\r
+  border-collapse: collapse;\r
+  width: 100%;\r
+  border: 1px solid var(--bda-border-input);\r
+}\r
+\r
+#sqlResult td,\r
+#sqlResult th {\r
+  text-align: center;\r
+  border-right: 1px solid var(--bda-border-input);\r
+  background: none;\r
+}\r
+\r
+#sqlResult tbody tr:nth-child(odd) {\r
+  background-color: var(--bda-surface);\r
+}\r
+\r
+/* Extra selectors needed to override the default styling */\r
+table.tablesorter tbody tr.normal-row td {\r
+  background: var(--bda-white);\r
+  color: var(--bda-text-muted);\r
+}\r
+\r
+table.tablesorter tbody tr.alt-row td {\r
+  background: var(--bda-accent-subtle);\r
+  color: var(--bda-text-muted);\r
+}\r
+\r
+table.tablesorter tr.normal-row:hover td,\r
+table.tablesorter tr.alt-row:hover td {\r
+  background-color: var(--bda-surface-hover);\r
+}\r
+\r
+.clickable:hover {\r
+  color: var(--bda-danger);\r
+  text-decoration: underline;\r
+}\r
+\r
+/* =============================================================================\r
+   Modal — .bda-overlay / .bda-modal\r
+   ============================================================================= */\r
+.bda-overlay {\r
+  position: fixed;\r
+  inset: 0;\r
+  background: rgba(0, 0, 0, 0.45);\r
+  backdrop-filter: blur(2px);\r
+  z-index: 9000;\r
+  display: flex;\r
+  align-items: center;\r
+  justify-content: center;\r
+  opacity: 0;\r
+  transition: opacity 0.2s ease;\r
+  padding: 20px;\r
+}\r
+\r
+.bda-overlay--visible {\r
+  opacity: 1;\r
+}\r
+\r
+.bda-overlay--hidden {\r
+  display: none !important;\r
+}\r
+\r
+.bda-modal {\r
+  background: var(--bda-white);\r
+  border-radius: var(--bda-radius-lg);\r
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.12);\r
+  width: 600px;\r
+  max-width: 95vw;\r
+  max-height: 90vh;\r
+  display: flex;\r
+  flex-direction: column;\r
+  transform: translateY(-10px);\r
+  transition: transform 0.2s ease;\r
+  overflow: hidden;\r
+}\r
+\r
+.bda-overlay--visible .bda-modal {\r
+  transform: translateY(0);\r
+}\r
+\r
+.bda-modal__header {\r
+  display: flex;\r
+  align-items: center;\r
+  padding: 14px 16px 10px;\r
+  border-bottom: 1px solid var(--bda-border);\r
+  flex-shrink: 0;\r
+}\r
+\r
+.bda-modal__title {\r
+  margin: 0;\r
+  font-size: var(--bda-font-size-md);\r
+  font-weight: 600;\r
+  color: var(--bda-text-strong);\r
+  flex: 1;\r
+}\r
+\r
+.bda-modal__close {\r
+  margin-left: auto;\r
+  opacity: 0.55;\r
+}\r
+\r
+.bda-modal__close:hover {\r
+  opacity: 1;\r
+}\r
+\r
+.bda-modal__body {\r
+  padding: 18px;\r
+  overflow-y: auto;\r
+  flex: 1;\r
+}\r
+\r
+.bda-modal__footer {\r
+  padding: 10px 16px;\r
+  border-top: 1px solid var(--bda-border);\r
+  display: flex;\r
+  gap: 8px;\r
+  justify-content: flex-end;\r
+  flex-shrink: 0;\r
+}\r
+\r
+#pipelineTable {\r
+  font-size: var(--bda-font-size-md);\r
+}\r
+\r
+#addComponentToolbarPopupContent {\r
+  max-height: 40vh;\r
+  overflow: auto;\r
+}\r
+\r
+.fav-submit-button {\r
+  float: right;\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+#methods,\r
+#vars {\r
+  float: left;\r
+  width: 50%;\r
+}\r
+\r
+#methods li,\r
+#vars li {\r
+  list-style-position: inside;\r
+  white-space: nowrap;\r
+  overflow: hidden;\r
+  text-overflow: ellipsis;\r
+}\r
+\r
+/* =============================================================================\r
+   Speedbar / Item Tree\r
+   ============================================================================= */\r
+#speedbar {\r
+  float: right;\r
+  width: 210px;\r
+  margin-right: 100px;\r
+  margin-top: 100px;\r
+}\r
+\r
+#speedbar #widget {\r
+  width: 240px;\r
+  border: 1px solid var(--bda-border-muted);\r
+  font-size: var(--bda-font-size-base);\r
+  padding: 10px;\r
+}\r
+\r
+#widget i {\r
+  font-size: var(--bda-font-size-xs);\r
+}\r
+\r
+#widget ul {\r
+  list-style-type: none;\r
+  padding-inline-start: 0px;\r
+  margin-block-end: 0;\r
+  margin-block-start: 0;\r
+}\r
+\r
+#widget p {\r
+  margin-top: 0;\r
+}\r
+\r
+#widget li {\r
+  margin-top: 5px;\r
+}\r
+\r
+.link {\r
+  cursor: pointer;\r
+}\r
+\r
+#pipelineTable pre {\r
+  margin: 0;\r
+}\r
+\r
+.clickable_property {\r
+  text-decoration: underline;\r
+  cursor: pointer;\r
+}\r
+\r
+/* =============================================================================\r
+   DASH (Dashboard)\r
+   ============================================================================= */\r
+#dashInput {\r
+  font-family: var(--bda-font-mono);\r
+}\r
+\r
+#dashForm {\r
+  font-family: var(--bda-font-mono);\r
+}\r
+\r
+#dashForm .tt-hint {\r
+  color: var(--bda-border-input);\r
+}\r
+\r
+#dashForm .form-group {\r
+  margin-bottom: 0;\r
+}\r
+\r
+#dashEditorForm {\r
+  font-size: var(--bda-font-size-md);\r
+}\r
+\r
+#dashEditor {\r
+  resize: none; /* min-height: 100px; */\r
+}\r
+\r
+#dashScreen {\r
+  font-family: var(--bda-font-mono);\r
+  overflow-y: auto;\r
+  max-height: 250px;\r
+  height: 250px;\r
+  margin-bottom: 15px;\r
+}\r
+\r
+.fullscreen #dashScreen {\r
+  margin-bottom: 0;\r
+  height: 100%;\r
+  max-height: 100%;\r
+}\r
+\r
+#dashScreen .alert {\r
+  padding-top: 5px;\r
+  padding-bottom: 5px;\r
+  margin-bottom: 5px;\r
+}\r
+\r
+#dashScreen pre {\r
+  background-color: inherit;\r
+  font-family: inherit;\r
+  border: 0;\r
+  color: inherit;\r
+}\r
+\r
+#dashScreen .dl-horizontal dt {\r
+  width: 80px;\r
+}\r
+\r
+#dashScreen .dl-horizontal dd {\r
+  margin-left: 90px;\r
+}\r
+\r
+.typeahead.dropdown-menu {\r
+  text-align: left;\r
+}\r
+\r
+table.table {\r
+  background-color: var(--bda-white);\r
+}\r
+\r
+/* Override dyn/admin style */\r
+.table th {\r
+  background-color: inherit;\r
+  border-style: inherit;\r
+}\r
+\r
+.printItem {\r
+  margin-top: 15px;\r
+}\r
+\r
+#dashSaveForm {\r
+  margin-bottom: 0;\r
+}\r
+\r
+.no-padding {\r
+  padding: 0 !important;\r
+}\r
+\r
+kbd {\r
+  padding: 2px 4px;\r
+  font-size: 90%;\r
+  color: var(--bda-white);\r
+  background-color: var(--bda-text-strong);\r
+  border-radius: var(--bda-radius-sm);\r
+  -webkit-box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .25);\r
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .25);\r
+}\r
+\r
+\r
+\r
+#dashTips {\r
+  margin-top: 10px;\r
+  margin-bottom: 5px;\r
+}\r
+\r
+.footer-right {\r
+  cursor: pointer;\r
+}\r
+\r
+.footer-right a {\r
+  border: 1px solid transparent;\r
+}\r
+\r
+/* =============================================================================\r
+   Cache Stats\r
+   ============================================================================= */\r
+table.cache {\r
+  border-spacing: 0;\r
+  border-collapse: collapse;\r
+}\r
+\r
+.cache tr.cache-subheader {\r
+  cursor: pointer;\r
+  background: var(--bda-surface);\r
+  transition: background 0.15s ease;\r
+}\r
+\r
+.cache tr.cache-subheader:hover {\r
+  background: var(--bda-border-subtle);\r
+}\r
+\r
+.cacheArrow i {\r
+  display: inline-block;\r
+  transition: transform 0.2s ease;\r
+  margin-right: 6px;\r
+}\r
+\r
+.cache-subheader.expanded .cacheArrow i {\r
+  transform: rotate(90deg);\r
+}\r
+\r
+.cache td,\r
+.cache th {\r
+  padding: 6px;\r
+}\r
+\r
+.cache td,\r
+.cache th {\r
+  border: 1px solid var(--bda-border);\r
+}\r
+\r
+button.cache {\r
+  cursor: pointer;\r
+}\r
+\r
+.fixed_headers {\r
+  table-layout: fixed;\r
+  width: 100%;\r
+}\r
+\r
+.fixed_headers thead {\r
+  width: 100%;\r
+}\r
+\r
+.fixed_headers thead th {\r
+  font-size: var(--bda-font-size-sm);\r
+  font-weight: 500;\r
+  padding: 2px;\r
+  overflow: hidden;\r
+}\r
+\r
+.fixed_headers th,\r
+.fixed_headers td {\r
+  width: 4%;\r
+}\r
+\r
+.fixed_headers.oldDynamo th,\r
+.fixed_headers.oldDynamo td {\r
+  width: 5.3%;\r
+}\r
+\r
+\r
+/* =============================================================================\r
+   Scheduler\r
+   ============================================================================= */\r
+#timeline-wrapper {\r
+  margin-bottom: 20px;\r
+}\r
+\r
+.twbs caption {\r
+  padding-top: 8px;\r
+  padding-bottom: 8px;\r
+  color: var(--bda-text-subtle);\r
+  text-align: left;\r
+}\r
+\r
+/* =============================================================================\r
+   XML Definition\r
+   ============================================================================= */\r
+#xmlDefAsTable {\r
+  margin-top: 15px;\r
+  /* for whatever reason on some pages\r
+  the whole section is inside an <a> tag\r
+  on native dyn/admin : need to reset color*/\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.item-descriptor-heading,\r
+.table-def {\r
+  text-transform: capitalize;\r
+  cursor: pointer;\r
+}\r
+\r
+#xmlDefAsTable .item-panel .panel-heading {\r
+  background-color: var(--bda-success-light);\r
+}\r
+\r
+.subtableHeader {\r
+  background-color: var(--bda-surface);\r
+  text-transform: capitalize;\r
+  font-weight: 600;\r
+}\r
+\r
+.item-panel .panel-heading {\r
+  padding: 10px;\r
+}\r
+\r
+/* Remove padding top/bot */\r
+.item-panel .panel-body {\r
+  padding: 0 15px;\r
+}\r
+\r
+.item-panel .row > [class^="col-"] {\r
+  padding: 10px;\r
+  border-right: 1px solid var(--bda-border);\r
+}\r
+\r
+.table-def [class^="col-"] {\r
+  text-transform: none;\r
+  background-color: var(--bda-accent-subtle);\r
+}\r
+\r
+.item-panel .highlight {\r
+  background-color: yellow;\r
+}\r
+\r
+.item-panel .property:hover {\r
+  background-color: var(--bda-surface);\r
+}\r
+\r
+#quickNavLinks {\r
+  margin-top: 10px;\r
+  max-height: 400px;\r
+  overflow-y: auto;\r
+  overflow-x: hidden;\r
+}\r
+\r
+#xmlDefQuickNav .btn.sorted{\r
+  background-color: var(--bda-success-light);\r
+}\r
+\r
+#xmlDefQuickNav h3.panel-title {\r
+  padding-top: 4px;\r
+}\r
+\r
+#definitionsContainer {\r
+  max-width: inherit;\r
+}\r
+\r
+#quickNavLinks .nav > li > a {\r
+  padding: 5px 15px\r
+}\r
+\r
+#xmlDefSearchBox {\r
+  font-size: 0.9em;\r
+}\r
+\r
+ol.itemDescAttributes {\r
+  text-transform: none;\r
+  margin: 0;\r
+  padding: 0;\r
+  font-weight: 500;\r
+}\r
+\r
+.itemDescAttributes > li {\r
+  display: inline-block;\r
+  padding-right: 5px;\r
+}\r
+\r
+.itemDescAttributes > li + li:before {\r
+  content: "/\\00a0";\r
+  padding: 0 5px;\r
+  color: var(--bda-border-input);\r
+}\r
+\r
+.attr-value {\r
+  font-weight: 600;\r
+}\r
+\r
+.table-name {\r
+  font-weight: 600;\r
+  text-transform: none;\r
+}\r
+\r
+.property-type,\r
+.enum,\r
+.derivation {\r
+  text-decoration: underline;\r
+}\r
+\r
+/* =============================================================================\r
+   Attribute badges\r
+   ============================================================================= */\r
+.bda-attr {\r
+  display: inline-block;\r
+  padding: 2px 8px;\r
+  margin: 2px 3px;\r
+  border-radius: var(--bda-radius-lg);\r
+  font-size: var(--bda-font-size-xs);\r
+  font-weight: 500;\r
+  background: var(--bda-surface-hover);\r
+  color: var(--bda-text-subtle);\r
+}\r
+\r
+.bda-attr-true {\r
+  background: var(--bda-success-bg);\r
+  color: var(--bda-success-text);\r
+}\r
+\r
+.data-type,\r
+.component-data-type {\r
+  text-transform: capitalize;\r
+}\r
+\r
+.row.subtableHeader .col-lg-05{\r
+  padding-left: 0;\r
+  padding-right: 0;\r
+  font-size: 8px;\r
+  text-align: center;\r
+}\r
+\r
+#xmlDefAsTable .tooltip-inner {\r
+  max-width: inherit;\r
+}\r
+\r
+#xmlDefAsTable  .popover ul {\r
+  padding-left: 10px;\r
+}\r
+\r
+#xmlDefAsTable .popover{\r
+  max-width: inherit;\r
+  width: 600px;\r
+  width: intrinsic;           /* Safari/WebKit uses a non-standard name */\r
+  width: -moz-max-content;    /* Firefox/Gecko */\r
+  width: -webkit-max-content; /* Chrome */\r
+}\r
+\r
+/* =============================================================================\r
+   Autocomplete\r
+   ============================================================================= */\r
+#searchField {\r
+  width: 300px;\r
+}\r
+\r
+/* =============================================================================\r
+   Extend Bootstrap grid — 0.5 column\r
+   ============================================================================= */\r
+.twbs .col-xs-05,\r
+.twbs .col-sm-05,\r
+.twbs .col-md-05,\r
+.twbs .col-lg-05 {\r
+  width: 4.166666665%;\r
+  position: relative;\r
+  min-height: 1px;\r
+  padding-left: 15px;\r
+  padding-right: 15px;\r
+  float: left;\r
+}\r
+\r
+.notifyjs-bootstrap-base {\r
+  font-size: var(--bda-font-size-sm);\r
+}\r
+\r
+.legend {\r
+  display : inline-block;\r
+  color : var(--bda-white);\r
+  border-radius : 5px;\r
+  font-size : var(--bda-font-size-xs);\r
+  padding : 3px;\r
+  margin : 5px;\r
+}\r
+\r
+/* =============================================================================\r
+   Tree popup / Vis.js network\r
+   ============================================================================= */\r
+#treePopup {\r
+  height: 90%;\r
+  width: 95%;\r
+  overflow: hidden;\r
+}\r
+\r
+.flexContainer {\r
+  display:flex;\r
+  height: 100%;\r
+}\r
+\r
+#treeInfo {\r
+  display:none;\r
+  float:left;\r
+}\r
+\r
+#treeContainer  {\r
+  height: 100%;\r
+  flex : 1;\r
+}\r
+\r
+/* =============================================================================\r
+   DASH Terminal\r
+   ============================================================================= */\r
+.bda-dash-screen {\r
+  font-family: var(--bda-font-mono);\r
+  background: #1a1b26;\r
+  color: #a9b1d6;\r
+  border-radius: var(--bda-radius-md);\r
+  padding: 12px;\r
+  height: 300px;\r
+  overflow-y: auto;\r
+  margin-bottom: 8px;\r
+  font-size: var(--bda-font-size-sm);\r
+  line-height: 1.5;\r
+}\r
+\r
+.bda-dash-input-row {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 6px;\r
+}\r
+\r
+.bda-dash-prompt {\r
+  font-family: var(--bda-font-mono);\r
+  color: #7dcfff;\r
+  font-weight: bold;\r
+  flex-shrink: 0;\r
+}\r
+\r
+.bda-dash-input {\r
+  font-family: var(--bda-font-mono);\r
+  flex: 1;\r
+  background: #16161e;\r
+  color: #a9b1d6;\r
+  border: 1px solid #3b4261;\r
+  border-radius: var(--bda-radius-sm);\r
+  padding: 4px 8px;\r
+  font-size: var(--bda-font-size-sm);\r
+}\r
+\r
+.bda-dash-input:focus {\r
+  outline: none;\r
+  border-color: #7aa2f7;\r
+}\r
+\r
+.bda-dash-line {\r
+  display: flex;\r
+  align-items: flex-start;\r
+  gap: 6px;\r
+  margin-bottom: 2px;\r
+}\r
+\r
+.bda-dash-line-input {\r
+  color: #c0caf5;\r
+  flex: 1;\r
+}\r
+\r
+.bda-dash-copy {\r
+  opacity: 0;\r
+  transition: opacity 0.15s ease;\r
+  padding: 1px 4px;\r
+  font-size: 11px;\r
+  background: transparent;\r
+  border: 1px solid #3b4261;\r
+  color: #565f89;\r
+}\r
+\r
+.bda-dash-line:hover .bda-dash-copy {\r
+  opacity: 1;\r
+}\r
+\r
+.bda-dash-output pre {\r
+  color: #9ece6a;\r
+  margin: 0;\r
+  white-space: pre-wrap;\r
+  word-break: break-word;\r
+}\r
+\r
+.bda-dash-error {\r
+  color: #f7768e;\r
+}\r
+\r
+.bda-dash-scripts {\r
+  margin-top: 8px;\r
+  padding: 8px;\r
+  background: var(--bda-surface);\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-sm);\r
+}\r
+\r
+.bda-dash-script-row {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+  margin-bottom: 4px;\r
+  padding: 4px 0;\r
+  border-bottom: 1px solid var(--bda-border-subtle);\r
+}\r
+\r
+/* =============================================================================\r
+   Actor Chain\r
+   ============================================================================= */\r
+.bda-actor-caller {\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-md);\r
+  padding: 12px 16px;\r
+  margin: 12px 0;\r
+  background: var(--bda-surface);\r
+}\r
+\r
+.bda-actor-title {\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-md);\r
+  margin-bottom: 8px;\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.bda-actor-endpoint {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+  margin-bottom: 10px;\r
+  font-size: var(--bda-font-size-sm);\r
+}\r
+\r
+.bda-actor-inputs {\r
+  margin: 8px 0;\r
+}\r
+\r
+.bda-actor-input-row {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+  margin-bottom: 6px;\r
+}\r
+\r
+.bda-actor-input-row label {\r
+  min-width: 120px;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-text-muted);\r
+}\r
+\r
+.bda-actor-result {\r
+  margin-top: 10px;\r
+  padding: 8px;\r
+  background: var(--bda-bg);\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-sm);\r
+  font-family: var(--bda-font-mono);\r
+  font-size: var(--bda-font-size-sm);\r
+  max-height: 200px;\r
+  overflow-y: auto;\r
+  white-space: pre-wrap;\r
+}\r
+\r
+/* =============================================================================\r
+   Keyboard Help Overlay\r
+   ============================================================================= */\r
+#bda-help-overlay {\r
+  position: fixed;\r
+  inset: 0;\r
+  background: rgba(0, 0, 0, 0.5);\r
+  z-index: 10000;\r
+  display: flex;\r
+  align-items: center;\r
+  justify-content: center;\r
+  opacity: 0;\r
+  transition: opacity 0.2s ease;\r
+}\r
+\r
+#bda-help-overlay.bda-help-overlay--visible {\r
+  opacity: 1;\r
+}\r
+\r
+.bda-help-panel {\r
+  background: var(--bda-white);\r
+  border-radius: var(--bda-radius-lg);\r
+  padding: 20px 24px;\r
+  max-width: 480px;\r
+  width: 90%;\r
+  max-height: 80vh;\r
+  overflow-y: auto;\r
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);\r
+}\r
+\r
+.bda-help-header {\r
+  display: flex;\r
+  justify-content: space-between;\r
+  align-items: center;\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-md);\r
+  margin-bottom: 14px;\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.bda-help-table {\r
+  width: 100%;\r
+  border-collapse: collapse;\r
+  font-size: var(--bda-font-size-sm);\r
+}\r
+\r
+.bda-help-module-row td {\r
+  padding: 8px 0 4px;\r
+  color: var(--bda-text-muted);\r
+  font-size: var(--bda-font-size-xs);\r
+  text-transform: uppercase;\r
+  letter-spacing: 0.05em;\r
+}\r
+\r
+.bda-help-table tr td {\r
+  padding: 3px 8px 3px 0;\r
+  vertical-align: middle;\r
+}\r
+\r
+.bda-help-table kbd {\r
+  display: inline-block;\r
+  padding: 1px 6px;\r
+  background: var(--bda-surface);\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius-sm);\r
+  font-family: var(--bda-font-mono);\r
+  font-size: 11px;\r
+  color: var(--bda-text-strong);\r
+  white-space: nowrap;\r
+}\r
+\r
+.bda-help-hint {\r
+  margin-top: 12px;\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-text-muted);\r
+  text-align: center;\r
+}\r
+\r
+/* =============================================================================\r
+   Responsive\r
+   ============================================================================= */\r
+@media (max-width: 1200px) {\r
+  #toolbar { gap: 6px; }\r
+  .fav { min-width: 80px; }\r
+}\r
+\r
+@media (max-width: 768px) {\r
+  body { padding-top: 60px; }\r
+\r
+  #bdaNavbar {\r
+    height: auto;\r
+    flex-wrap: wrap;\r
+    padding: 4px 8px;\r
+  }\r
+\r
+  .bda-nav__left {\r
+    width: 100%;\r
+    margin-bottom: 4px;\r
+  }\r
+\r
+  .bda-nav__right {\r
+    width: 100%;\r
+    flex-wrap: wrap;\r
+  }\r
+\r
+  .bda-nav__brand {\r
+    display: none;\r
+  }\r
+\r
+  .bda-nav__search {\r
+    flex: 1;\r
+  }\r
+\r
+  #toolbar {\r
+    gap: 6px;\r
+  }\r
+\r
+  .fav {\r
+    min-width: 0;\r
+    max-width: none;\r
+    flex: 1 1 calc(50% - 6px);\r
+  }\r
+\r
+  .bda-history-list {\r
+    flex-wrap: wrap;\r
+  }\r
+}\r
+`;
   function insertCss(resourceName) {
     $("<link />").attr("href", GM_getResourceURL(resourceName)).attr("rel", "stylesheet").attr("type", "text/css").appendTo("head");
   }
@@ -3328,25 +5530,22 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
     const $breadcrumb = oldDynamo ? $("h1:eq(0)") : $("h1:eq(1)");
     if ($breadcrumb.length === 0) return;
     $breadcrumb.attr("id", "breadcrumb").append(
-      $("<button></button>", { class: "bda-button bda-button-clipboard", html: "<i class='fa fa-files-o'></i>" }).on("click", () => {
+      $("<button></button>", { class: "bda-btn bda-btn--icon", html: "<i class='fa fa-files-o'></i>" }).on("click", () => {
         const path = document.location.pathname.replace("/dyn/admin/nucleus", "");
         GM_setClipboard(path);
       })
     );
     const $classLink = $breadcrumb.next();
-    $("<button></button>", { class: "bda-button bda-button-clipboard", html: "<i class='fa fa-files-o'></i>" }).on("click", () => {
+    $("<button></button>", { class: "bda-btn bda-btn--icon", html: "<i class='fa fa-files-o'></i>" }).on("click", () => {
       GM_setClipboard($classLink.attr("title") ?? $classLink.text());
     }).insertAfter($classLink);
   }
   function bindEscapeKey() {
     $(document).on("keyup", (e) => {
       if (e.key === "Escape" || e.keyCode === 27) {
-        $(".popup_block").fadeOut();
-        ["#bdaBackupPanel", "#bdaBugPanel"].forEach((id) => {
-          if ($(id).css("display") !== "none") {
-            $(id).slideToggle();
-          }
-        });
+        $(".bda-nav__dropdown").removeClass("bda-nav__dropdown--open");
+        $(".bda-nav__btn").removeClass("bda-nav__btn--active");
+        if ($("#bda-help-overlay").length) bdaKeyboard.hideHelp();
       }
     });
   }
@@ -3395,6 +5594,24 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       $("#search").css("display", "inline");
     }
     bindEscapeKey();
+    bdaKeyboard.register({
+      key: "k",
+      ctrl: true,
+      description: "Focus search",
+      module: "Global",
+      handler: () => {
+        $("#searchFieldBDA").trigger("focus").trigger("select");
+      }
+    });
+    bdaKeyboard.register({
+      key: "?",
+      description: "Show keyboard shortcuts",
+      module: "Global",
+      handler: () => {
+        bdaKeyboard.showHelp();
+      }
+    });
+    bdaKeyboard.init();
     logTrace("BDA init complete");
     console.timeEnd("bda");
   }

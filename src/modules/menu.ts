@@ -3,54 +3,78 @@
  * Replaces bda.menu.js
  */
 
-import { logTrace, rotateArrow, copyToClipboard } from '../core/common';
+import { logTrace, copyToClipboard } from '../core/common';
 import { bdaStorage } from '../core/storage';
 import { BdaSearch } from './search';
 import type { BdaStorageData } from '../types/global';
 
 export class BdaMenu {
-  private $menuBar!: JQuery;
+  private $navRight!: JQuery;
   private search = new BdaSearch();
 
   init(): void {
     console.time('bdaMenu');
     logTrace('BdaMenu init');
-    this.$menuBar = $("<div id='menuBar'></div>").appendTo('body');
-    this.createBugReportPanel();
-    this.createBackupPanel();
-    this.createConfigurationPanel();
-    this.createWhatsnewPanel();
-    this.createSearchBox();
 
-    // Generic click binding for menu panels
-    this.$menuBar.on('click', '.menu', (event) => {
-      const $thisParent = $(event.currentTarget);
-      $('.menu').each(function () {
-        const $this = $(this);
-        const $panel = $('#' + $this.attr('data-panel'));
-        if ($this.attr('id') !== $thisParent.attr('id') && $panel.css('display') !== 'none') {
-          $panel.slideToggle();
-          rotateArrow($this.find('.menuArrow i'));
-        }
-      });
-      const $panel = $('#' + $thisParent.attr('data-panel'));
-      $panel.slideToggle();
-      rotateArrow($thisParent.find('.menuArrow i'));
+    // Apply persisted dark mode before rendering UI
+    if (bdaStorage.getConfigurationValue('dark_mode') === true) {
+      $('body').addClass('bda-dark');
+    }
+
+    const $navbar = $('<nav id="bdaNavbar"></nav>').appendTo('body');
+    const $left = $('<div class="bda-nav__left"></div>').appendTo($navbar);
+    $('<span class="bda-nav__brand">BDA</span>').appendTo($left);
+    this.createSearchBox($left);
+
+    this.$navRight = $('<div class="bda-nav__right" id="bdaNavActions"></div>').appendTo($navbar);
+    this.createAboutItem();
+    this.createConfigItem();
+    this.createWhatsnewItem();
+
+    // Close open dropdowns when clicking outside the navbar
+    $(document).on('click.bdaNav', (e) => {
+      if (!($(e.target as Element).closest('#bdaNavbar').length)) {
+        this.closeAllDropdowns();
+      }
     });
 
     console.timeEnd('bdaMenu');
   }
 
   // -------------------------------------------------------------------------
-  // Bug report panel
+  // Navigation helpers
   // -------------------------------------------------------------------------
 
-  private createBugReportPanel(): void {
-    $("<div id='bdaBug' class='menu' data-panel='bdaBugPanel'></div>")
-      .appendTo(this.$menuBar)
-      .html("<p>About</p><div class='menuArrow'><i class='up fa fa-arrow-down'></i></div>");
+  private createNavItem(id: string, icon: string, label: string): { $btn: JQuery; $dropdown: JQuery } {
+    const $item = $(`<div class="bda-nav__item" id="${id}"></div>`).appendTo(this.$navRight);
+    const $btn = $(`<button class="bda-nav__btn"><i class="fa ${icon}"></i> ${label}</button>`).appendTo($item);
+    const $dropdown = $(`<div class="bda-nav__dropdown" id="${id}Dropdown"></div>`).appendTo($item);
 
-    $("<div id='bdaBugPanel' class='menuPanel'></div>").appendTo('body').html(
+    $btn.on('click', (e) => {
+      e.stopPropagation();
+      const isOpen = $dropdown.hasClass('bda-nav__dropdown--open');
+      this.closeAllDropdowns();
+      if (!isOpen) {
+        $dropdown.addClass('bda-nav__dropdown--open');
+        $btn.addClass('bda-nav__btn--active');
+      }
+    });
+
+    return { $btn, $dropdown };
+  }
+
+  private closeAllDropdowns(): void {
+    this.$navRight.find('.bda-nav__dropdown').removeClass('bda-nav__dropdown--open');
+    this.$navRight.find('.bda-nav__btn').removeClass('bda-nav__btn--active');
+  }
+
+  // -------------------------------------------------------------------------
+  // About panel
+  // -------------------------------------------------------------------------
+
+  private createAboutItem(): void {
+    const { $dropdown } = this.createNavItem('bdaBug', 'fa-info-circle', 'About');
+    $dropdown.html(
       `<p>Better Dyn Admin has a <a target='_blank' href='https://github.com/jc7447/BetterDynAdmin'>GitHub page</a>.<br>
       Please report any bug in the <a target='_blank' href='https://github.com/jc7447/BetterDynAdmin/issues'>issues tracker</a>.
       <br><br><strong>BDA version ${GM_info.script.version}</strong></p>`,
@@ -61,18 +85,13 @@ export class BdaMenu {
   // What's new panel
   // -------------------------------------------------------------------------
 
-  private createWhatsnewPanel(): void {
-    $("<div id='whatsnew' class='menu' data-panel='whatsnewPanel'></div>")
-      .appendTo(this.$menuBar)
-      .html("<p>What's new</p><div class='menuArrow'><i class='up fa fa-arrow-down'></i></div>");
-
-    $("<div id='whatsnewPanel' class='menuPanel'></div>")
-      .appendTo('body')
-      .html("<p id='whatsnewContent'></p>");
-
-    $('#whatsnew').on('click', () => {
-      if ($('#whatsnewPanel').css('display') === 'none') {
-        $('#whatsnewContent').html(GM_getResourceText('whatsnew'));
+  private createWhatsnewItem(): void {
+    const { $btn, $dropdown } = this.createNavItem('whatsnew', 'fa-star', "What's New");
+    let loaded = false;
+    $btn.on('click', () => {
+      if (!loaded && $dropdown.hasClass('bda-nav__dropdown--open')) {
+        $dropdown.html(GM_getResourceText('whatsnew'));
+        loaded = true;
       }
     });
   }
@@ -81,20 +100,15 @@ export class BdaMenu {
   // Backup panel
   // -------------------------------------------------------------------------
 
-  private createBackupPanel(): void {
-    $("<div id='bdaBackup' class='menu' data-panel='bdaBackupPanel'></div>")
-      .appendTo(this.$menuBar)
-      .html("<p>Backup</p><div class='menuArrow'><i class='up fa fa-arrow-down'></i></div>");
-
-    $("<div id='bdaBackupPanel' class='menuPanel'></div>")
-      .appendTo('body')
-      .html(
-        '<p>Backup BDA data to keep your favorite components and stored queries safe.<br><br>' +
-        '<strong>You can also import a backup from another domain!</strong></p>' +
-        "<textarea id='bdaData' placeholder='Paste your data here to restore it.'></textarea>" +
-        "<button id='bdaDataBackup'>Backup</button>" +
-        "<button id='bdaDataRestore'>Restore</button>",
-      );
+  private createBackupItem(): void {
+    const { $dropdown } = this.createNavItem('bdaBackup', 'fa-database', 'Backup');
+    $dropdown.html(
+      '<p>Backup BDA data to keep your favorite components and stored queries safe.<br><br>' +
+      '<strong>You can also import a backup from another domain!</strong></p>' +
+      "<textarea id='bdaData' placeholder='Paste your data here to restore it.'></textarea>" +
+      "<div style='margin-top:6px'><button id='bdaDataBackup' class='bda-btn'>Backup</button>" +
+      " <button id='bdaDataRestore' class='bda-btn'>Restore</button></div>",
+    );
 
     $('#bdaDataBackup').on('click', () => {
       const data = bdaStorage.getData();
@@ -119,39 +133,45 @@ export class BdaMenu {
   // Configuration panel
   // -------------------------------------------------------------------------
 
-  private createConfigurationPanel(): void {
-    $("<div id='bdaConfig' class='menu' data-panel='bdaConfigPanel'></div>")
-      .appendTo(this.$menuBar)
-      .html("<p>Configuration</p><div class='menuArrow'><i class='up fa fa-arrow-down'></i></div>");
+  private createConfigItem(): void {
+    const { $dropdown } = this.createNavItem('bdaConfig', 'fa-cog', 'Config');
 
-    const $panel = $("<div id='bdaConfigPanel' class='menuPanel'></div>").appendTo('body');
+    // Dark mode toggle
+    const isDarkMode = bdaStorage.getConfigurationValue('dark_mode') === true;
+    $dropdown.html(
+      `<p>Dark mode: <input type='checkbox' id='dark_mode_checkbox' ${isDarkMode ? 'checked' : ''}></p>`,
+    );
+    $('#dark_mode_checkbox').on('change', function () {
+      const checked = $(this).prop('checked') as boolean;
+      bdaStorage.storeConfiguration('dark_mode', checked);
+      $('body').toggleClass('bda-dark', checked);
+    });
 
     // Mono-instance mode
     const monoInstanceKey = 'mono_instance';
     const isMonoInstance = GM_getValue(monoInstanceKey) === true;
-    $panel.html(
+    $dropdown.append(
       `<p>Same BDA data on every domain: <input type='checkbox' id='mono_instance_checkbox' ${isMonoInstance ? 'checked' : ''}></p>`,
     );
-
     $('#mono_instance_checkbox').on('change', function () {
       const checked = $(this).prop('checked') as boolean;
       GM_setValue(monoInstanceKey, checked);
       if (checked) GM_setValue('BDA_GM_Backup', JSON.stringify(bdaStorage.getData()));
     });
 
-    this.createCheckBoxConfig($panel, {
+    this.createCheckBoxConfig($dropdown, {
       name: 'search_autocomplete',
       description: 'Search AutoComplete',
       message: '<p>Note: Reload dyn/admin to apply.</p>',
     });
 
-    this.createCheckBoxConfig($panel, {
+    this.createCheckBoxConfig($dropdown, {
       name: 'defaultOpenXmlDefAsTable',
       description: 'Display XML Def as table by default',
     });
 
-    this.createDefaultMethodsConfig($panel);
-    this.createDataSourceFolderConfig($panel);
+    this.createDefaultMethodsConfig($dropdown);
+    this.createDataSourceFolderConfig($dropdown);
   }
 
   private createCheckBoxConfig(
@@ -175,7 +195,7 @@ export class BdaMenu {
     $config.append(
       `<p>Default methods when bookmarking:</p><textarea id='config-methods-data' placeholder='Comma separated'>${savedMethods.join(',')}</textarea>`,
     );
-    $('<button>Save methods</button>').on('click', () => {
+    $('<button class="bda-btn">Save methods</button>').on('click', () => {
       const arr = ($('#config-methods-data').val() as string).replace(/ /g, '').split(',').filter(Boolean);
       bdaStorage.storeConfiguration('default_methods', arr);
     }).appendTo($config);
@@ -184,7 +204,7 @@ export class BdaMenu {
     $config.append(
       `<p>Default properties when bookmarking:</p><textarea id='config-properties-data' placeholder='Comma separated'>${savedProps.join(',')}</textarea>`,
     );
-    $('<button>Save properties</button>').on('click', () => {
+    $('<button class="bda-btn">Save properties</button>').on('click', () => {
       const arr = ($('#config-properties-data').val() as string).replace(/ /g, '').split(',').filter(Boolean);
       bdaStorage.storeConfiguration('default_properties', arr);
     }).appendTo($config);
@@ -196,7 +216,7 @@ export class BdaMenu {
     $config.append(
       `<p>JDBC datasource folders:</p><textarea id='config-data-source-folders-data' placeholder='Comma separated paths'>${saved}</textarea>`,
     );
-    $('<button>Save folders</button>').on('click', () => {
+    $('<button class="bda-btn">Save folders</button>').on('click', () => {
       const val = ($('#config-data-source-folders-data').val() as string).trim();
       bdaStorage.storeConfiguration('data_source_folder', val);
     }).appendTo($config);
@@ -206,15 +226,12 @@ export class BdaMenu {
   // Search box
   // -------------------------------------------------------------------------
 
-  private createSearchBox(): void {
-    $("<div id='bdaSearch' class='menu'></div>")
-      .appendTo(this.$menuBar)
-      .html(
-        '<p>Search</p>' +
-        '<form action="/dyn/admin/atg/dynamo/admin/en/cmpn-search.jhtml">' +
-        '<input type="text" name="query" id="searchFieldBDA" placeholder="focus: ctrl+shift+f">' +
-        '</form>',
-      );
+  private createSearchBox($parent: JQuery): void {
+    $(
+      '<form class="bda-nav__search" action="/dyn/admin/atg/dynamo/admin/en/cmpn-search.jhtml">' +
+      '<input type="text" name="query" id="searchFieldBDA" placeholder="Search\u2026 (ctrl+shift+f)">' +
+      '</form>',
+    ).appendTo($parent);
 
     try {
       const autocomplete = bdaStorage.getConfigurationValue('search_autocomplete') === true;

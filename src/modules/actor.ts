@@ -44,7 +44,7 @@ export class BdaActor {
     const $endpointRow = $('<div class="bda-actor-endpoint"></div>');
     const $endpointLabel = $('<span>REST endpoint: </span>');
     const $endpointLink = $('<code></code>').text(restEndpoint);
-    const $copyBtn = $('<button class="bda-button bda-button-clipboard"><i class="fa fa-files-o"></i></button>').on('click', () => {
+    const $copyBtn = $('<button class="bda-btn bda-btn--icon"><i class="fa fa-files-o"></i></button>').on('click', () => {
       copyToClipboard(restEndpoint);
     });
 
@@ -62,7 +62,7 @@ export class BdaActor {
       $callerDiv.append($inputSection);
     }
 
-    const $callBtn = $('<button class="bda-button btn btn-primary">Call Chain</button>').on('click', () => {
+    const $callBtn = $('<button class="bda-btn bda-btn--primary">Call Chain</button>').on('click', () => {
       const params: Record<string, string> = {};
       $callerDiv.find('input[data-name]').each(function () {
         params[$(this).data('name') as string] = $(this).val() as string;

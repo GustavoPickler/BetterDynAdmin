@@ -4,6 +4,7 @@
  */
 
 import type { BdaAlertOptions, ComponentTag, ComponentTags } from '../types/global';
+import { BdaModal } from './modal';
 
 export const isLoggingTrace = false;
 export const xmlDefinitionCacheTimeout = 1200; // 20min
@@ -452,44 +453,19 @@ export function registerJQueryExtensions(): void {
 
   // BDA Alert plugin
   const pluginName = 'bdaAlert';
-  const ALERT_MODAL_TEMPLATE =
-    '<div class="bda-alert-wrapper twbs">' +
-    '<div class="modal fade bda-modal" tabindex="-1" role="dialog">' +
-    '<div class="modal-dialog" role="document">' +
-    '<div class="modal-content">' +
-    '<div class="modal-body bda-alert-body"></div>' +
-    '<div class="modal-footer bda-alert-footer"></div>' +
-    '</div></div></div></div>';
 
   ($.fn as unknown as Record<string, unknown>)[pluginName] = function (this: JQuery, options: BdaAlertOptions) {
     try {
-      return this.each(function (this: HTMLElement) {
-        const $parent = $(this);
-        const wrapper = $(ALERT_MODAL_TEMPLATE);
-        $parent.append(wrapper);
-        const modal = wrapper.find('.modal');
-
-        modal.find('.bda-alert-body').html(options.msg);
-        const $footer = modal.find('.bda-alert-footer').empty();
-
-        const hide = () => {
-          modal.modal('hide');
-          wrapper.detach();
-        };
-
-        for (const opt of options.options) {
-          $('<input>', {
-            type: 'button',
-            value: opt.label,
-            class: 'btn btn-default',
-          })
-            .on('click', () => {
-              if (opt._callback) opt._callback();
-              hide();
-            })
-            .appendTo($footer);
-        }
-        modal.modal('show');
+      return this.each(function () {
+        const modal = new BdaModal({
+          content: options.msg,
+          closeOnBackdrop: false,
+          buttons: options.options.map((opt) => ({
+            label: opt.label,
+            callback: opt._callback,
+          })),
+        });
+        modal.show();
       });
     } catch (e) {
       console.error(e);

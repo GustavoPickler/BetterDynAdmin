@@ -17,10 +17,12 @@ import {
   sortArray,
 } from '../core/common';
 import { bdaStorage } from '../core/storage';
+import { BdaModal } from '../core/modal';
 import type { BDAConfig, StoredComponent, ComponentTags } from '../types/global';
 
 export class BdaToolbar {
   private bda: BDAConfig;
+  private addComponentModal: BdaModal | null = null;
 
   constructor(bda: BDAConfig) {
     this.bda = bda;
@@ -54,14 +56,13 @@ export class BdaToolbar {
   }
 
   showComponentHistory(): void {
-    $("<div id='history'></div>").insertAfter(this.bda.logoSelector);
+    const $hist = $("<div id='history'></div>").insertAfter(this.bda.logoSelector);
     const history: string[] = JSON.parse(localStorage.getItem('componentHistory') ?? '[]') as string[];
-    let html = 'Component history : ';
-    history.forEach((comp, i) => {
-      if (i !== 0) html += ', ';
-      html += `<a href='${comp}'>${getComponentNameFromPath(comp)}</a>`;
+    if (history.length === 0) return;
+    const $list = $('<div class="bda-history-list"></div>').appendTo($hist);
+    history.forEach((comp) => {
+      $(`<a class="bda-history-pill" href="${comp}">${getComponentNameFromPath(comp)}</a>`).appendTo($list);
     });
-    $('#history').html(html);
   }
 
   // -------------------------------------------------------------------------
@@ -171,11 +172,10 @@ export class BdaToolbar {
       const favTags = (fav.tags ?? []).map((t, i, arr) => '#' + t + (i < arr.length - 1 ? ',' : '')).join('');
 
       const $fav = $("<div class='toolbar-elem fav'></div>")
-        .css('background-color', colorToCss(colors))
-        .css('border', '1px solid ' + this.getBorderColor(colors))
         .html(
+          `<div class='fav-color-bar' style='background:${colorToCss(colors)}'></div>` +
           `<div class='favLink'><a href='${fav.path}' title='${fav.name}'><div class='favTitle'>${shortName}</div><div class='favName'>${fav.name}</div></a></div>` +
-          `<div class='favArrow' id='favArrow${favId}'><i class='up fa fa-arrow-down'></i></div>` +
+          `<div class='favArrow' id='favArrow${favId}'><i class='fa fa-chevron-down'></i></div>` +
           `<div class='favMoreInfo' id='favMoreInfo${favId}'>` +
           `<div class='favLogDebug'><form method='POST' action='${fav.path}' id='logDebugForm${fav.name}'><input type='hidden' value='loggingDebug' name='propertyName'><input type='hidden' value='' name='newValue'>logDebug : <a href='javascript:void(0)' class='logdebug' id='logDebug${fav.name}'>true</a>&nbsp;|&nbsp;<a href='javascript:void(0)' class='logdebug' id='logDebug${fav.name}'>false</a></form></div>` +
           `<div class='favDelete' id='delete${fav.name}'><i class='fa fa-trash-o'></i> Delete</div>` +
@@ -209,13 +209,11 @@ export class BdaToolbar {
     if (this.bda.isComponentPage) {
       const componentPath = purgeSlashes(document.location.pathname);
       if (!this.isComponentAlreadyStored(componentPath)) {
-        $("<div class='toolbar-elem newFav'><a href='javascript:void(0)' id='addComponent' title='Add component to toolbar'>+</a></div>")
+        $("<div class='toolbar-elem newFav'><button class='bda-btn bda-btn--sm' id='addComponent' title='Add to favorites'><i class='fa fa-plus'></i> Add</button></div>")
           .appendTo('#toolbar');
 
-        $('.close').on('click', () => { $('.popup_block').fadeOut(); });
-
         $('#submitComponent').on('click', () => {
-          $('.popup_block').fadeOut();
+          this.addComponentModal?.hide();
           const methods: string[] = [];
           const vars: string[] = [];
 
@@ -236,7 +234,7 @@ export class BdaToolbar {
           this.reloadToolbar();
         });
 
-        $('.newFav').on('click', () => {
+        $('#addComponent').on('click', () => {
           const $methodsList = $('#methods').empty();
           const $varsList = $('#vars').empty();
 
@@ -270,7 +268,7 @@ export class BdaToolbar {
           const defProperties = bdaStorage.getConfigurationValue('default_properties') as string[] | null;
           if (defProperties) defProperties.forEach((p) => { $(`#var_${p}`).prop('checked', true); });
 
-          $('#addComponentToolbarPopup').fadeIn();
+          this.addComponentModal?.show();
         });
       }
     }
@@ -279,24 +277,22 @@ export class BdaToolbar {
   }
 
   private createAddPopup(): void {
-    $(
-      "<div id='addComponentToolbarPopup' class='popup_block'>" +
-      "<div class='addFavOptions'>" +
-      "<a href='#' class='close'><i class='fa fa-times'></i></a>" +
-      "<h3 class='popup_title'>Add new component</h3>" +
+    const $content = $(
       "<p>Choose methods and/or properties to shortcut : </p>" +
       "<div id='addComponentToolbarPopupContent'>" +
-      "<div id='methods'><ul></ul></div>" +
-      "<div id='vars'><ul></ul></div>" +
-      "</div><br>" +
+      "<div id='methods'></div>" +
+      "<div id='vars'></div>" +
+      "</div>" +
       "<div id='favSetTags'>" +
       "<div class='favline'><div>Add tags:</div><div><ul id='existingTags'></ul></div></div>" +
       "<div class='favline'><div>New tags:</div><div><input id='newtags' class='newtags' type='text' placeholder='comma separated'></div></div>" +
       "</div>" +
-      "<div class='addFavSubmit'><button type='button' id='submitComponent'>Add <i class='fa fa-play'></i></button></div>" +
-      "</div>" +
-      "</div>",
-    ).insertAfter(this.bda.logoSelector);
+      "<div class='addFavSubmit'><button type='button' id='submitComponent' class='bda-btn bda-btn--primary'>Add <i class='fa fa-play'></i></button></div>",
+    );
+    this.addComponentModal = new BdaModal({
+      title: 'Add new component',
+      content: $content,
+    }).mount();
   }
 
   private addExistingTagsToToolbarPopup(): void {
@@ -318,7 +314,7 @@ export class BdaToolbar {
     const $list = $('<ul></ul>');
 
     if (Object.keys(tags).length > 0) {
-      $('<button id="clear-filters" class="bda-button bda-button-icon" title="Clear"><i class="fa fa-times" aria-hidden="true"></i></button>')
+      $('<button id="clear-filters" class="bda-btn bda-btn--icon" title="Clear"><i class="fa fa-times" aria-hidden="true"></i></button>')
         .on('click', () => { this.clearTags(); })
         .appendTo($('<li class="tag-filter"></li>').appendTo($list));
     }
@@ -326,11 +322,8 @@ export class BdaToolbar {
     const sortedTags = sortArray(Object.keys(tags));
     sortedTags.forEach((tagName) => {
       const tag = tags[tagName];
-      const tagColor = stringToColour(tagName);
 
-      const $li = $('<li class="bda-button tag-filter"></li>')
-        .css('background-color', colorToCss(tagColor))
-        .css('border', '1px solid ' + this.getBorderColor(tagColor))
+      const $li = $(`<li class="bda-tag-pill${tag.selected ? ' bda-tag-pill--active' : ''}"></li>`)
         .appendTo($list);
 
       $('<input/>', {

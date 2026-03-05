@@ -10,7 +10,9 @@ import {
   copyToClipboard,
   getComponentNameFromPath,
 } from '../core/common';
+import { BdaModal } from '../core/modal';
 import { bdaStorage } from '../core/storage';
+import { bdaKeyboard } from '../core/keyboard';
 import { bdaComponent } from '../core/component';
 import type { BDAConfig, DashScript } from '../types/global';
 
@@ -35,37 +37,9 @@ export class BdaDash {
   private commandHistory: string[] = [];
   private variables: Record<string, DashVariable> = {};
   private lastOutput: unknown = null;
+  private dashModal: BdaModal | null = null;
 
   private readonly HIST_PERSIST_SIZE = 20;
-  private readonly MODAL_HTML = `
-    <div id="dashModal" class="twbs modal fade" tabindex="-1" role="dialog">
-      <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal">&times;</button>
-            <h4 class="modal-title">DASH - DynAdmin SHell</h4>
-          </div>
-          <div class="modal-body">
-            <div id="dashScreen" class="bda-dash-screen"></div>
-            <div class="bda-dash-input-row">
-              <span class="bda-dash-prompt">$</span>
-              <input type="text" id="dashInput" class="bda-dash-input" placeholder="Type a command..." autocomplete="off">
-              <button class="bda-button btn btn-primary btn-sm" id="dashSubmit">Run</button>
-            </div>
-            <div id="dashScripts" class="bda-dash-scripts" style="display:none">
-              <div id="dashScriptList"></div>
-              <input type="text" id="dashScriptName" placeholder="Script name">
-              <button class="bda-button btn btn-sm btn-default" id="dashSaveScript">Save</button>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-default" data-dismiss="modal">Close</button>
-            <button class="btn btn-default" id="dashToggleScripts"><i class="fa fa-file-text-o"></i> Scripts</button>
-            <button class="btn btn-default" id="dashClear"><i class="fa fa-trash-o"></i> Clear</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
 
   constructor(bda: BDAConfig) {
     this.bda = bda;
@@ -75,7 +49,6 @@ export class BdaDash {
     logTrace('BdaDash init');
     this.loadHistory();
     this.createModal();
-    this.createLaunchButton();
   }
 
   // -------------------------------------------------------------------------
@@ -83,16 +56,41 @@ export class BdaDash {
   // -------------------------------------------------------------------------
 
   private createModal(): void {
-    $('body').append(this.MODAL_HTML);
+    const $content = $(
+      '<div id="dashScreen" class="bda-dash-screen"></div>' +
+      '<div class="bda-dash-input-row">' +
+      '<span class="bda-dash-prompt">$</span>' +
+      '<input type="text" id="dashInput" class="bda-dash-input" placeholder="Type a command..." autocomplete="off">' +
+      '<button class="bda-btn bda-btn--primary bda-btn--sm" id="dashSubmit">Run</button>' +
+      '</div>' +
+      '<div id="dashScripts" class="bda-dash-scripts" style="display:none">' +
+      '<div id="dashScriptList"></div>' +
+      '<input type="text" id="dashScriptName" placeholder="Script name">' +
+      '<button class="bda-btn bda-btn--sm" id="dashSaveScript">Save</button>' +
+      '</div>',
+    );
+    this.dashModal = new BdaModal({
+      title: 'DASH — DynAdmin SHell',
+      content: $content,
+      width: '800px',
+      buttons: [
+        { label: 'Close', callback: () => this.dashModal!.hide() },
+        { id: 'dashToggleScripts', label: '<i class="fa fa-file-text-o"></i> Scripts' },
+        { id: 'dashClear', label: '<i class="fa fa-trash-o"></i> Clear' },
+      ],
+    }).mount();
     this.bindModalEvents();
   }
 
   private createLaunchButton(): void {
-    const $btn = $(
-      '<div id="dashLaunch" class="bda-dash-launch"><a href="javascript:void(0)" title="Open DASH"><i class="fa fa-terminal"></i> DASH</a></div>',
-    );
-    $btn.on('click', () => { $('#dashModal').modal('show'); });
-    $('body').append($btn);
+    const $btn = $('<button class="bda-nav__btn" id="dashLaunch" title="Open DASH"><i class="fa fa-terminal"></i> DASH</button>');
+    $btn.on('click', () => { this.dashModal?.show(); });
+    const $navActions = $('#bdaNavActions');
+    if ($navActions.length) {
+      $('<div class="bda-nav__item"></div>').append($btn).appendTo($navActions);
+    } else {
+      $('body').append($btn);
+    }
   }
 
   private bindModalEvents(): void {
@@ -135,11 +133,11 @@ export class BdaDash {
       this.renderScripts();
     });
 
-    // Keyboard shortcut Ctrl+Alt+T to open DASH
-    $(document).on('keydown', (e) => {
-      if (e.ctrlKey && e.altKey && e.key === 't') {
-        $('#dashModal').modal('show');
-      }
+    // Keyboard shortcut registered via central framework
+    bdaKeyboard.register({
+      key: 't', ctrl: true, alt: true,
+      description: 'Open DASH (alternate)', module: 'DASH',
+      handler: () => { this.dashModal?.show(); },
     });
   }
 
@@ -337,7 +335,7 @@ export class BdaDash {
 
   private appendInputLine(text: string): void {
     $('#dashScreen').append(
-      `<div class="bda-dash-line"><span class="bda-dash-prompt">$</span><span class="bda-dash-line-input">${this.escapeHtml(text)}</span><button class="bda-button bda-dash-copy btn btn-xs" title="Copy"><i class="fa fa-files-o"></i></button></div>`,
+      `<div class="bda-dash-line"><span class="bda-dash-prompt">$</span><span class="bda-dash-line-input">${this.escapeHtml(text)}</span><button class="bda-btn bda-btn--sm bda-dash-copy" title="Copy"><i class="fa fa-files-o"></i></button></div>`,
     );
     this.bindCopyButtons();
     this.scrollToBottom();
@@ -408,8 +406,8 @@ export class BdaDash {
     }
     scripts.forEach((s) => {
       const $row = $(`<div class="bda-dash-script-row"><strong>${s.name}</strong></div>`);
-      const $runBtn = $('<button class="bda-button btn btn-xs btn-primary">Run</button>');
-      const $delBtn = $('<button class="bda-button btn btn-xs btn-danger">Delete</button>');
+      const $runBtn = $('<button class="bda-btn bda-btn--sm bda-btn--primary">Run</button>');
+      const $delBtn = $('<button class="bda-btn bda-btn--sm bda-btn--danger">Delete</button>');
       $runBtn.on('click', async () => {
         for (const line of s.content.split('\n')) {
           if (line.trim()) await this.executeCommand(line.trim());

@@ -145,12 +145,12 @@ export class BdaRepository {
     $("<div id='RQLToolbar'></div>")
       .append(
         `<div> Action : ${actionSelect} <span id='editor'>` +
-        `<span id='itemIdField'>ids : <input type='text' id='itemId' placeholder='Id1,Id2,Id3' /></span>` +
+        `<span id='itemIdField'>ids : <input type='text' id='itemId' class='bda-input' placeholder='Id1,Id2,Id3' /></span>` +
         `<span id='itemDescriptorField'> descriptor : <select id='itemDescriptor' class='itemDescriptor'>${this.getDescriptorOptions()}</select></span>` +
         `<span id='idOnlyField' style='display:none;'><label for='idOnly'>&nbsp;id only : </label><input type='checkbox' id='idOnly' /></span>` +
         `</span>` +
-        `<button type='button' id='RQLAdd'>Add</button>` +
-        `<button type='button' id='RQLGo'>Add &amp; Enter <i class='fa fa-play fa-x'></i></button>` +
+        `<button type='button' id='RQLAdd' class='bda-btn'>Add</button>` +
+        `<button type='button' id='RQLGo' class='bda-btn bda-btn--primary'>Add &amp; Enter <i class='fa fa-play fa-x'></i></button>` +
         `</div>`,
       )
       .insertBefore('#RQLEditor textarea')
@@ -160,9 +160,9 @@ export class BdaRepository {
 
     $('#RQLText').after(
       "<div id='tabs'>" +
-      "<ul id='navbar'>" +
-      "<li id='propertiesTab' class='selected'>Properties</li>" +
-      "<li id='queriesTab'>Stored Queries</li>" +
+      "<ul id='navbar' class='bda-tabs'>" +
+      "<li id='propertiesTab' class='bda-tabs__item bda-tabs__item--active'>Properties</li>" +
+      "<li id='queriesTab' class='bda-tabs__item'>Stored Queries</li>" +
       '</ul>' +
       "<div id='storedQueries'><i>No stored query for this repository</i></div>" +
       "<div id='descProperties'><i>Select a descriptor to see his properties</i></div>" +
@@ -178,11 +178,11 @@ export class BdaRepository {
 
     $('#tabs').after(
       "<div id='RQLSave'>" +
-      `<div style='display:inline-block;width:200px'><button id='clearQuery' type='button'>Clear <i class='fa fa-ban fa-x'></i></button></div>` +
-      `<div style='display:inline-block;width:530px'>Split tab every : <input type='text' value='${itemByTab}' id='splitValue'> items. ${checkboxSplit}</div>` +
-      `<button type='submit' id='RQLSubmit'>Enter <i class='fa fa-play fa-x'></i></button>` +
+      `<div style='display:inline-block;width:200px'><button id='clearQuery' type='button' class='bda-btn'>Clear <i class='fa fa-ban fa-x'></i></button></div>` +
+      `<div style='display:inline-block;width:530px'>Split tab every : <input type='text' value='${itemByTab}' id='splitValue' class='bda-input' style='height:auto;'> items. ${checkboxSplit}</div>` +
+      `<button type='submit' id='RQLSubmit' class='bda-btn bda-btn--primary'>Enter <i class='fa fa-play fa-x'></i></button>` +
       '</div>' +
-      `<div><input placeholder='Name this query' type='text' id='queryLabel'>&nbsp;<button type='button' id='saveQuery'>Save <i class='fa fa-save fa-x'></i></button></div>`,
+      `<div><input placeholder='Name this query' type='text' id='queryLabel' class='bda-input' style='height:auto;'>&nbsp;<button type='button' id='saveQuery' class='bda-btn'>Save <i class='fa fa-save fa-x'></i></button></div>`,
     );
 
     this.showQueryList();
@@ -245,15 +245,15 @@ export class BdaRepository {
     $('#queriesTab').on('click', () => {
       $('#descProperties').css('display', 'none');
       $('#storedQueries').css('display', 'inline-block');
-      $('#queriesTab').addClass('selected');
-      $('#propertiesTab').removeClass('selected');
+      $('#queriesTab').addClass('selected bda-tabs__item--active');
+      $('#propertiesTab').removeClass('selected bda-tabs__item--active');
     });
 
     $('#propertiesTab').on('click', () => {
       $('#descProperties').css('display', 'inline-block');
       $('#storedQueries').css('display', 'none');
-      $('#propertiesTab').addClass('selected');
-      $('#queriesTab').removeClass('selected');
+      $('#propertiesTab').addClass('selected bda-tabs__item--active');
+      $('#queriesTab').removeClass('selected bda-tabs__item--active');
     });
 
     $('#RQLAction').on('change', () => {
@@ -279,6 +279,22 @@ export class BdaRepository {
     $('#clearQuery').on('click', () => this.setQueryEditorValue(''));
     $('#noSplit').on('change', () => this.storeSplitValue());
     $('#splitValue').on('change', () => this.storeSplitValue());
+
+    // Keyboard shortcuts
+    $(document).on('keydown.bdaRepo', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        this.submitRQLQuery(false);
+      }
+      if (e.ctrlKey && !e.shiftKey && e.key === 's') {
+        e.preventDefault();
+        $('#saveQuery').trigger('click');
+      }
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        this.setQueryEditorValue('');
+      }
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -397,14 +413,14 @@ export class BdaRepository {
       const isDebugEnabled = $(`a[href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors']`).length > 0;
       html += `<tr class='${rowClass}'>`;
       html += `<td class='descriptor'>${d}</td>`;
-      html += `<td><a class='btn-desc' href='${componentURI}?action=seetmpl&itemdesc=${d}#showProperties'>Properties</a>`;
-      html += `&nbsp;<a class='btn-desc' href='${componentURI}?action=seenamed&itemdesc=${d}#namedQuery'>Named queries</a></td>`;
+      html += `<td><a class='bda-btn bda-btn--sm' href='${componentURI}?action=seetmpl&itemdesc=${d}#showProperties'>Properties</a>`;
+      html += `&nbsp;<a class='bda-btn bda-btn--sm' href='${componentURI}?action=seenamed&itemdesc=${d}#namedQuery'>Named queries</a></td>`;
       html += '<td>';
       if (isDebugEnabled) {
-        html += `<a class='btn-desc red' href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors'>Disable</a>`;
+        html += `<a class='bda-btn bda-btn--sm bda-btn--danger' href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors'>Disable</a>`;
       } else {
-        html += `<a class='btn-desc' href='${componentURI}?action=setiddbg&itemdesc=${d}#listItemDescriptors'>Enable</a>`;
-        html += `&nbsp;<a class='btn-desc' href='${componentURI}?action=dbgprops&itemdesc=${d}#debugProperties'>Edit</a>`;
+        html += `<a class='bda-btn bda-btn--sm' href='${componentURI}?action=setiddbg&itemdesc=${d}#listItemDescriptors'>Enable</a>`;
+        html += `&nbsp;<a class='bda-btn bda-btn--sm' href='${componentURI}?action=dbgprops&itemdesc=${d}#debugProperties'>Edit</a>`;
       }
       html += '</td></tr>';
       if (i !== 0 && ((i + 1) % splitValue === 0 || i + 1 === descriptors.length)) html += '</table>';
@@ -838,9 +854,9 @@ export class BdaRepository {
       let extra = curProp.name === 'id' ? ' id' : curProp.name === 'descriptor' ? ' descriptor' : '';
       html += `<tr class='${i % 2 === 0 ? 'even' : 'odd'}${extra}'>`;
       html += `<th>${curProp.name}<span class='prop_name'>`;
-      if (curProp.rdonly === 'true') html += "<div class='prop_attr prop_attr_red'>R</div>";
-      if (curProp.derived === 'true') html += "<div class='prop_attr prop_attr_green'>D</div>";
-      if (curProp.exportable === 'true') html += "<div class='prop_attr prop_attr_blue'>E</div>";
+      if (curProp.rdonly === 'true') html += "<span class='bda-badge bda-badge--danger'>R</span>";
+      if (curProp.derived === 'true') html += "<span class='bda-badge bda-badge--success'>D</span>";
+      if (curProp.exportable === 'true') html += "<span class='bda-badge bda-badge--accent'>E</span>";
       html += '</span></th>';
       datas.forEach((d) => { html += this.renderProperty(curProp, d[curProp.name], d['id'], isItemTree); });
       html += '</tr>';
@@ -910,9 +926,9 @@ export class BdaRepository {
 
     $outputDiv.append(html);
     $outputDiv.prepend(
-      "<div class='prop_attr prop_attr_red'>R</div> : read-only " +
-      "<div class='prop_attr prop_attr_green'>D</div> : derived " +
-      "<div class='prop_attr prop_attr_blue'>E</div> : export is false",
+      "<span class='bda-badge bda-badge--danger'>R</span> : read-only " +
+      "<span class='bda-badge bda-badge--success'>D</span> : derived " +
+      "<span class='bda-badge bda-badge--accent'>E</span> : export is false",
     );
 
     if ($('.copyField').length > 0) {
@@ -1010,7 +1026,7 @@ export class BdaRepository {
       "</select>&nbsp;" +
       "<input type='checkbox' id='printRepositoryAttr' /><label for='printRepositoryAttr'>Print attribute : </label>" +
       `<pre style='margin:0; display:inline;'>repository='${getCurrentComponentPath()}'</pre> <br><br>` +
-      "<button id='itemTreeBtn'>Enter <i class='fa fa-play fa-x'></i></button>" +
+      "<button id='itemTreeBtn' class='bda-btn bda-btn--primary'>Enter <i class='fa fa-play fa-x'></i></button>" +
       '</div>',
     );
     $itemTree.append("<div id='itemTreeInfo' />");
@@ -1113,7 +1129,7 @@ export class BdaRepository {
     const componentPath = getCurrentComponentPath();
 
     if (outputType !== 'HTMLtab' && outputType !== 'tree') {
-      $('#itemTreeInfo').append("<input type='button' id='itemTreeCopyButton' value='Copy result to clipboard' />");
+      $('#itemTreeInfo').append("<button type='button' id='itemTreeCopyButton' class='bda-btn'>Copy result to clipboard</button>");
       $('#itemTreeCopyButton').on('click', () => copyToClipboard($('#itemTreeResult').text()));
     }
 
@@ -1279,7 +1295,7 @@ export class BdaRepository {
         const [, itemDesc = '', cacheMode = '', , cacheLocality = ''] = match;
         $tr.attr('data-item-desc', itemDesc).attr('data-cache-mode', cacheMode).attr('data-cache-locality', cacheLocality);
         $td.html(
-          `<span class="cacheArrow"><i class="up fa fa-arrow-right"></i></span>` +
+          `<span class="cacheArrow"><i class="fa fa-chevron-right"></i></span>` +
           `<span> item-descriptor=<b>${itemDesc}</b></span>` +
           `<span> cache-mode=<b>${cacheMode}</b></span>` +
           (cacheLocality ? `<span> cache-locality=<b>${cacheLocality}</b></span>` : ''),

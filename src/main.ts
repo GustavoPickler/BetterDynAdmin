@@ -23,6 +23,7 @@ import { BdaSearch } from './modules/search';
 import { BdaDash } from './modules/dash';
 import { BdaScheduler } from './modules/scheduler';
 import { bdaStorage } from './core/storage';
+import { bdaKeyboard } from './core/keyboard';
 
 // CSS
 import bdaCss from './styles/bda.css?raw';
@@ -130,7 +131,7 @@ function setupCopyClipboardButtons(oldDynamo: boolean): void {
   if ($breadcrumb.length === 0) return;
 
   $breadcrumb.attr('id', 'breadcrumb').append(
-    $('<button></button>', { class: 'bda-button bda-button-clipboard', html: "<i class='fa fa-files-o'></i>" })
+    $('<button></button>', { class: 'bda-btn bda-btn--icon', html: "<i class='fa fa-files-o'></i>" })
       .on('click', () => {
         const path = document.location.pathname.replace('/dyn/admin/nucleus', '');
         GM_setClipboard(path);
@@ -138,7 +139,7 @@ function setupCopyClipboardButtons(oldDynamo: boolean): void {
   );
 
   const $classLink = $breadcrumb.next();
-  $('<button></button>', { class: 'bda-button bda-button-clipboard', html: "<i class='fa fa-files-o'></i>" })
+  $('<button></button>', { class: 'bda-btn bda-btn--icon', html: "<i class='fa fa-files-o'></i>" })
     .on('click', () => { GM_setClipboard($classLink.attr('title') ?? $classLink.text()); })
     .insertAfter($classLink);
 }
@@ -146,12 +147,9 @@ function setupCopyClipboardButtons(oldDynamo: boolean): void {
 function bindEscapeKey(): void {
   $(document).on('keyup', (e) => {
     if (e.key === 'Escape' || e.keyCode === 27) {
-      $('.popup_block').fadeOut();
-      ['#bdaBackupPanel', '#bdaBugPanel'].forEach((id) => {
-        if ($(id).css('display') !== 'none') {
-          $(id).slideToggle();
-        }
-      });
+      $('.bda-nav__dropdown').removeClass('bda-nav__dropdown--open');
+      $('.bda-nav__btn').removeClass('bda-nav__btn--active');
+      if ($('#bda-help-overlay').length) bdaKeyboard.hideHelp();
     }
   });
 }
@@ -219,6 +217,18 @@ function init(): void {
   }
 
   bindEscapeKey();
+
+  // Keyboard shortcut framework
+  bdaKeyboard.register({
+    key: 'k', ctrl: true, description: 'Focus search', module: 'Global',
+    handler: () => { $('#searchFieldBDA').trigger('focus').trigger('select'); },
+  });
+  bdaKeyboard.register({
+    key: '?', description: 'Show keyboard shortcuts', module: 'Global',
+    handler: () => { bdaKeyboard.showHelp(); },
+  });
+  bdaKeyboard.init();
+
   logTrace('BDA init complete');
   console.timeEnd('bda');
 }
