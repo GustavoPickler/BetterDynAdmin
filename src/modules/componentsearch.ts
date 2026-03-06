@@ -132,11 +132,15 @@ export class BdaComponentSearch {
   private buildQueryVariants(q: string): string[] {
     const variants = new Set<string>();
     variants.add(q);
-    // capitalize first letter
-    variants.add(q.charAt(0).toUpperCase() + q.slice(1));
-    // capitalize every word segment (split on spaces, dots, slashes)
-    const titleCase = q.replace(/(^|[\s./])([a-z])/g, (_, sep: string, c: string) => sep + c.toUpperCase());
-    variants.add(titleCase);
+    // Base: first letter capitalized
+    const cap0 = q.charAt(0).toUpperCase() + q.slice(1);
+    variants.add(cap0);
+    // Cap position 0 + each other position — covers e.g. "itaushop" → "ItauShop"
+    for (let i = 1; i < q.length; i++) {
+      const arr = cap0.split('');
+      arr[i] = arr[i].toUpperCase();
+      variants.add(arr.join(''));
+    }
     return Array.from(variants);
   }
 

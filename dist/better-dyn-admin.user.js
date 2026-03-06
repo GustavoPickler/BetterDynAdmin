@@ -3815,9 +3815,13 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
     buildQueryVariants(q) {
       const variants = /* @__PURE__ */ new Set();
       variants.add(q);
-      variants.add(q.charAt(0).toUpperCase() + q.slice(1));
-      const titleCase = q.replace(/(^|[\s./])([a-z])/g, (_, sep, c) => sep + c.toUpperCase());
-      variants.add(titleCase);
+      const cap0 = q.charAt(0).toUpperCase() + q.slice(1);
+      variants.add(cap0);
+      for (let i = 1; i < q.length; i++) {
+        const arr = cap0.split("");
+        arr[i] = arr[i].toUpperCase();
+        variants.add(arr.join(""));
+      }
       return Array.from(variants);
     }
     parseResultsFromHtml(html) {
