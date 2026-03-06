@@ -13,34 +13,56 @@ export class BdaSearch {
     this.build($searchField, options);
   }
 
-  private build($input: JQuery, options: { align?: string }): void {
-    if (!window.Bloodhound) {
-      logTrace('Bloodhound not available for search autocomplete');
-      return;
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private buildQueryVariants(q: string): string[] {
+    const variants = new Set<string>();
+    variants.add(q);
+    const cap0 = q.charAt(0).toUpperCase() + q.slice(1);
+    variants.add(cap0);
+    for (let i = 1; i < q.length; i++) {
+      const arr = cap0.split('');
+      arr[i] = arr[i].toUpperCase();
+      variants.add(arr.join(''));
     }
+    return Array.from(variants);
+  }
 
-    const searchEndpoint = '/dyn/admin/atg/dynamo/admin/en/cmpn-search.jhtml?query=';
-
-    const engine = new window.Bloodhound({
-      datumTokenizer: window.Bloodhound.tokenizers.whitespace,
-      queryTokenizer: window.Bloodhound.tokenizers.whitespace,
-      remote: {
-        url: searchEndpoint + '%QUERY',
-        wildcard: '%QUERY',
-        transform: (response: string) => {
-          const $result = $(response);
-          const results: string[] = [];
-          $result.find("th:contains('Search Results:')").closest('table').find('td a').each(function () {
-            const href = $(this).attr('href') ?? '';
-            const path = href.replace('/dyn/admin/nucleus', '');
-            if (path) results.push(path);
-          });
-          return results;
-        },
-      },
+  private fetchVariants(query: string, scope: string): Promise<string[]> {
+    const endpoint = '/dyn/admin/atg/dynamo/admin/en/cmpn-search.jhtml';
+    const variants = this.buildQueryVariants(query);
+    const requests = variants.map((v) =>
+      $.get(endpoint, { query: v, scope }).then((html: string) => {
+        const results: string[] = [];
+        const $result = $(html);
+        $result.filter('table').add($result.find('table')).each(function () {
+          const $tbl = $(this);
+          if ($tbl.find('th').text().includes('Search Results:')) {
+            $tbl.find('td a').each(function () {
+              const href = $(this).attr('href') ?? '';
+              const path = href.replace('/dyn/admin/nucleus', '');
+              if (path) results.push(path);
+            });
+          }
+        });
+        return results;
+      }),
+    );
+    return Promise.all(requests).then((all) => {
+      const seen = new Set<string>();
+      return all.flat().filter((p) => { if (seen.has(p)) return false; seen.add(p); return true; }).sort();
     });
+  }
 
-    engine.initialize();
+  private build($input: JQuery, options: { align?: string }): void {
+    const DEBOUNCE_MS = 2000;
+
+    const source = (query: string, _sync: (r: string[]) => void, async: (r: string[]) => void): void => {
+      if (this.debounceTimer) clearTimeout(this.debounceTimer);
+      this.debounceTimer = setTimeout(() => {
+        this.fetchVariants(query, 'running').then(async);
+      }, DEBOUNCE_MS);
+    };
 
     const $wrapper = $('<div class="twbs bda-search-wrapper"></div>');
     $input.wrap($wrapper);
@@ -53,8 +75,8 @@ export class BdaSearch {
       },
       {
         name: 'components',
-        limit: 15,
-        source: engine.ttAdapter(),
+        limit: 20,
+        source,
         templates: {
           suggestion: (data: string) =>
             `<div class="bda-search-suggestion">${data}</div>`,
