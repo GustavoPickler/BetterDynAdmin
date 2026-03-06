@@ -442,7 +442,8 @@ export class BdaRepository {
 
   private toggleRawXml(): void {
     $('#rawXml').toggle();
-    $('#rawXmlLink').html($('#rawXml').css('display') === 'none' ? 'show raw XML' : 'hide raw XML');
+    const visible = $('#rawXml').is(':visible');
+    $('#rawXmlLink').html(visible ? "<i class='fa fa-code'></i> Hide raw XML" : "<i class='fa fa-code'></i> Show raw XML");
   }
 
   // -------------------------------------------------------------------------
@@ -794,39 +795,102 @@ export class BdaRepository {
 
   private showRQLResults(): void {
     logTrace('Start showRQLResults');
-    $('#RQLResults').append("<p><a href='javascript:void(0)' id='rawXmlLink'>Show raw xml</a></p>\n<p id='rawXml'></p>");
 
-    let xmlContent = $(this.resultsSelector).next().text().trim();
+    // Hide original ATG result text immediately so it doesn't flash
+    const $atgResult = $(this.resultsSelector).next();
+    $atgResult.hide();
+
+    let xmlContent = $atgResult.text().trim();
     xmlContent = sanitizeXml(xmlContent);
 
     processRepositoryXmlDef('definitionFiles', ($xmlDef) => {
       const log = this.showXMLAsTab(xmlContent, $xmlDef as JQuery | null, $('#RQLResults'), false);
       this.showRQLLog(log, false);
 
-      $(this.resultsSelector).next().appendTo('#rawXml');
+      // Build structured raw XML viewer
+      const rawText = $atgResult.text();
+      this.buildRawXmlViewer(rawText);
+      $atgResult.remove();
       $(this.resultsSelector).remove();
 
       $('#rawXmlLink').on('click', () => {
         this.toggleRawXml();
-        const xmlSize = $('#rawXml pre').html()?.length ?? 0;
-        if (xmlSize < this.xmlDefinitionMaxSize) {
-          if (typeof hljs !== 'undefined') $('#rawXml').each((_, block) => hljs.highlightBlock(block));
-        } else if ($('#xmlHighlight').length === 0) {
-          $("<p id='xmlHighlight' />")
-            .html('The XML result is big. XML highlight disabled. <br><button id="xmlHighlightBtn">Highlight XML now</button>')
-            .prependTo('#rawXml');
-          $('#xmlHighlightBtn').on('click', () => {
-            if (typeof hljs !== 'undefined') $('#rawXml pre').each((_, block) => hljs.highlightBlock(block));
-          });
-        }
-      });
-
-      $('.copyLink').on('click', function () {
-        const id = ($(this).attr('id') ?? '').replace('link_', '').replace(/(:|\.|\[|\]|,)/g, '\\$1');
-        $(`#${id}`).toggle();
-        $(`#text_${id}`).toggle();
       });
     });
+  }
+
+  private buildRawXmlViewer(rawText: string): void {
+    // Parse items from raw ATG output
+    const items: Array<{ id: string; descriptor: string; content: string }> = [];
+    const parts = rawText.split(/------\s*Printing item with id:\s*/);
+
+    parts.forEach((part) => {
+      const trimmed = part.trim();
+      if (!trimmed) return;
+
+      // Extract ID from the first line
+      const firstLine = trimmed.split('\n')[0].trim();
+      const restContent = trimmed.substring(firstLine.length).trim();
+
+      // Try to extract descriptor from <add-item item-descriptor="xxx">
+      const descMatch = restContent.match(/item-descriptor="([^"]+)"/);
+      const descriptor = descMatch ? descMatch[1] : 'unknown';
+      const id = firstLine || 'unknown';
+
+      items.push({ id, descriptor, content: restContent || trimmed });
+    });
+
+    const $rawXml = $('<div id="rawXml"></div>');
+
+    // Toolbar
+    const $toolbar = $('<div class="bda-rawxml-toolbar"></div>');
+    $toolbar.append(
+      `<span class="bda-rawxml-toolbar__title"><i class="fa fa-code"></i> Raw XML <span class="bda-desc-card__count">${items.length} item(s)</span></span>`,
+    );
+    $toolbar.append(
+      '<div class="bda-rawxml-search"><i class="fa fa-search"></i><input type="text" class="bda-input" placeholder="Search by ID..." /></div>',
+    );
+    $rawXml.append($toolbar);
+
+    // Body with items
+    const $body = $('<div class="bda-rawxml-body"></div>');
+
+    if (items.length === 0) {
+      // Fallback: just show raw text
+      $body.append($('<div class="bda-rawxml-item__content"></div>').text(rawText));
+    } else {
+      items.forEach((item, i) => {
+        const $item = $(`<div class="bda-rawxml-item" data-item-id="${item.id}"></div>`);
+        const $header = $(`<div class="bda-rawxml-item__header">
+          <i class="fa fa-chevron-right"></i>
+          <span class="bda-rawxml-item__desc">${item.descriptor}</span>
+          <span style="color:var(--bda-slate-400)">&bull;</span>
+          <span class="bda-rawxml-item__id">${item.id}</span>
+        </div>`);
+        const $content = $('<div class="bda-rawxml-item__content"></div>').text(item.content).hide();
+
+        $header.on('click', function () {
+          $content.toggle();
+          $(this).find('i').toggleClass('fa-chevron-right fa-chevron-down');
+        });
+
+        $item.append($header).append($content);
+        $body.append($item);
+      });
+    }
+
+    $rawXml.append($body);
+
+    // Search
+    $toolbar.find('input').on('input', function () {
+      const term = ($(this).val() as string).toLowerCase();
+      $body.find('.bda-rawxml-item').each(function () {
+        const id = ($(this).attr('data-item-id') ?? '').toLowerCase();
+        $(this).toggle(!term || id.includes(term));
+      });
+    });
+
+    $('#RQLResults .bda-desc-grid').before($rawXml);
   }
 
   private showRqlErrors(): void {
@@ -855,6 +919,18 @@ export class BdaRepository {
   // -------------------------------------------------------------------------
   // XML Tab rendering
   // -------------------------------------------------------------------------
+
+  private formatPropertyName(name: string): string {
+    // "FINALORDERNUMBER" → "finalordernumber", "camelCase" stays
+    const lower = /^[A-Z_]+$/.test(name) ? name.toLowerCase() : name;
+    return lower
+      // camelCase splits: "finalOrderNumber" → "final Order Number"
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .split(/[\s_]+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }
 
   private escapeHTML(s: string): string {
     return String(s).replace(/&(?!\w+;)/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -903,24 +979,73 @@ export class BdaRepository {
     return result;
   }
 
-  private renderProperty(curProp: PropertyType, propValue: string | undefined, itemId: string | undefined, isItemTree: boolean): string {
-    const td = `<td data-property='${curProp.name}' data-item-id='${itemId ?? ''}'>`;
+  private renderTab(itemDesc: string, types: PropertyType[], datas: ItemData[], tabId: string, isItemTree: boolean): string {
+    const descName = itemDesc.substring(1);
+    let html = '';
+
+    datas.forEach((d, di) => {
+      const itemId = d['id'] ?? '';
+      const cardId = `bda-desc-${descName}-${itemId}-${di}`;
+
+      html += `<div class="bda-desc-card" id="${cardId}" data-descriptor="${descName}" data-item-id="${itemId}">`;
+      // Header
+      html += '<div class="bda-desc-card__header">';
+      html += '<div class="bda-desc-card__info">';
+      html += `<i class="fa fa-database" style="color:var(--bda-slate-500);font-size:13px"></i>`;
+      html += `<span class="bda-desc-card__descriptor">${descName}</span>`;
+      html += `<span style="color:var(--bda-slate-400)">&bull;</span>`;
+      html += `<span class="bda-desc-card__id">${itemId}</span>`;
+      html += '</div>';
+      html += '<div class="bda-desc-card__btns">';
+      html += `<button class="bda-desc-card__btn bda-desc-card__btn--minimize" title="Minimize"><i class="fa fa-minus"></i></button>`;
+      html += `<button class="bda-desc-card__btn bda-desc-card__btn--close" title="Close"><i class="fa fa-times"></i></button>`;
+      html += '</div>';
+      html += '</div>';
+
+      // Body
+      html += '<div class="bda-desc-card__body">';
+      html += '<div class="bda-desc-card__search"><i class="fa fa-search"></i><input type="text" class="bda-input bda-desc-card__search-input" placeholder="Search properties..." /></div>';
+      html += `<table class="dataTable" data-descriptor="${descName}"${isItemTree ? ` id="${tabId}_${di}"` : ''}>`;
+      types.forEach((curProp) => {
+        html += '<tr>';
+        // Property name cell
+        html += '<td><div class="bda-desc-card__prop-label">';
+        html += `<span class="bda-desc-card__prop-name">${this.formatPropertyName(curProp.name)}`;
+        if (curProp.rdonly === 'true') html += " <span class='bda-badge bda-badge--danger'>R</span>";
+        if (curProp.derived === 'true') html += " <span class='bda-badge bda-badge--success'>D</span>";
+        if (curProp.exportable === 'true') html += " <span class='bda-badge bda-badge--accent'>E</span>";
+        html += '</span>';
+        html += `<span class="bda-desc-card__prop-key">${curProp.name}</span>`;
+        html += '</div></td>';
+        // Value cell
+        html += `<td class="bda-desc-card__prop-value" data-property="${curProp.name}" data-item-id="${itemId}">${this.renderPropertyValue(curProp, d[curProp.name], itemId, isItemTree)}</td>`;
+        html += '</tr>';
+      });
+      html += '</table></div>';
+
+      html += '</div>'; // end card
+    });
+
+    return html;
+  }
+
+  private renderPropertyValue(curProp: PropertyType, propValue: string | undefined, itemId: string, isItemTree: boolean): string {
     if (propValue === null || propValue === undefined) {
-      return `${td}<i class='fa fa-pencil-square-o' aria-hidden='true'></i></td>`;
+      return "<i class='fa fa-pencil-square-o' aria-hidden='true'></i>";
     }
     propValue = propValue.replace(/ /g, '●');
     if (curProp.name === 'descriptor') propValue = propValue.substring(1);
     const baseId = `${curProp.name}_${itemId}`;
 
-    if (curProp.name === 'id') return `<td id='${baseId}'>${propValue}</td>`;
+    if (curProp.name === 'id') return `<span id='${baseId}'>${propValue}</span>`;
 
-    if (propValue.length > 25) {
-      return `${td}<a class='copyLink' href='javascript:void(0)' title='Show all' id='link_${baseId}'><span id='${baseId}'>${this.escapeHTML(propValue.substring(0, 25))}...</span></a><textarea class='copyField' id='text_${baseId}' readonly>${propValue}</textarea></td>`;
+    if (propValue.length > 50) {
+      return `<a class='copyLink' href='javascript:void(0)' title='Show all' id='link_${baseId}'><span id='${baseId}'>${this.escapeHTML(propValue.substring(0, 50))}...</span></a><textarea class='copyField' id='text_${baseId}' readonly>${propValue}</textarea>`;
     }
 
     if (curProp.isId === true) {
       const parts = this.parseRepositoryId(propValue);
-      let html = td;
+      let html = '';
       parts.forEach((p) => {
         if (p !== MAP_SEPARATOR && p !== LIST_SEPARATOR) {
           html += isItemTree
@@ -928,27 +1053,11 @@ export class BdaRepository {
             : `<a class='clickable_property loadable_property' data-id='${p}' data-descriptor='${curProp.itemDesc ?? ''}'>${p}</a>`;
         } else html += p;
       });
-      return html + '</td>';
+      return html;
     }
 
-    if (curProp.name === 'descriptor' || curProp.rdonly === 'true' || curProp.derived === 'true') return `<td>${propValue}</td>`;
-    return `${td}<i class='fa fa-pencil-square-o' aria-hidden='true'></i>${propValue}</td>`;
-  }
-
-  private renderTab(itemDesc: string, types: PropertyType[], datas: ItemData[], tabId: string, isItemTree: boolean): string {
-    let html = `<table class='dataTable' data-descriptor='${itemDesc.substring(1)}'${isItemTree ? ` id='${tabId}'` : ''}>`;
-    types.forEach((curProp, i) => {
-      let extra = curProp.name === 'id' ? ' id' : curProp.name === 'descriptor' ? ' descriptor' : '';
-      html += `<tr class='${i % 2 === 0 ? 'even' : 'odd'}${extra}'>`;
-      html += `<th>${curProp.name}<span class='prop_name'>`;
-      if (curProp.rdonly === 'true') html += "<span class='bda-badge bda-badge--danger'>R</span>";
-      if (curProp.derived === 'true') html += "<span class='bda-badge bda-badge--success'>D</span>";
-      if (curProp.exportable === 'true') html += "<span class='bda-badge bda-badge--accent'>E</span>";
-      html += '</span></th>';
-      datas.forEach((d) => { html += this.renderProperty(curProp, d[curProp.name], d['id'], isItemTree); });
-      html += '</tr>';
-    });
-    return html + '</table>';
+    if (curProp.name === 'descriptor' || curProp.rdonly === 'true' || curProp.derived === 'true') return propValue;
+    return `<i class='fa fa-pencil-square-o' aria-hidden='true'></i>${propValue}`;
   }
 
   private showXMLAsTab(xmlContent: string, $xmlDef: JQuery | null, $outputDiv: JQuery, isItemTree: boolean): string {
@@ -993,7 +1102,19 @@ export class BdaRepository {
       datas[curItemDesc].push(curData);
     });
 
-    let html = `<p class='nbResults'>${$addItems.length} items in ${nbTypes} descriptor(s)</p>`;
+    // Legend
+    const $legend = $(
+      '<div class="bda-desc-legend">' +
+      '<div class="bda-desc-legend__item"><span class="bda-badge bda-badge--danger">R</span> read-only</div>' +
+      '<div class="bda-desc-legend__item"><span class="bda-badge bda-badge--success">D</span> derived</div>' +
+      '<div class="bda-desc-legend__item"><span class="bda-badge bda-badge--accent">E</span> export is false</div>' +
+      '<div class="bda-desc-legend__actions"></div>' +
+      '</div>',
+    );
+    $outputDiv.append($legend);
+
+    // Grid container
+    let cardsHtml = '';
     const splitObj = this.getStoredSplitObj();
     let splitValue = splitObj?.activeSplit === false ? parseInt(splitObj.splitValue) : 0;
 
@@ -1001,32 +1122,76 @@ export class BdaRepository {
       if (splitValue === 0) splitValue = datas[itemDesc].length;
       let nbTab = 0;
       if (datas[itemDesc].length <= splitValue) {
-        html += this.renderTab(itemDesc, types[itemDesc], datas[itemDesc], itemDesc.substring(1), isItemTree);
+        cardsHtml += this.renderTab(itemDesc, types[itemDesc], datas[itemDesc], itemDesc.substring(1), isItemTree);
       } else {
         while (splitValue * nbTab < datas[itemDesc].length) {
           const start = splitValue * nbTab;
-          html += this.renderTab(itemDesc, types[itemDesc], datas[itemDesc].slice(start, Math.min(start + splitValue, datas[itemDesc].length)), `${itemDesc}_${nbTab}`, isItemTree);
+          cardsHtml += this.renderTab(itemDesc, types[itemDesc], datas[itemDesc].slice(start, Math.min(start + splitValue, datas[itemDesc].length)), `${itemDesc}_${nbTab}`, isItemTree);
           nbTab++;
         }
       }
     }
 
-    $outputDiv.append(html);
-    $outputDiv.prepend(
-      "<span class='bda-badge bda-badge--danger'>R</span> : read-only " +
-      "<span class='bda-badge bda-badge--success'>D</span> : derived " +
-      "<span class='bda-badge bda-badge--accent'>E</span> : export is false",
-    );
+    const $grid = $(`<div class="bda-desc-grid">${cardsHtml}</div>`);
+    $outputDiv.append($grid);
 
-    if ($('.copyField').length > 0) {
-      $outputDiv.find('p.nbResults').append("<br><a href='javascript:void(0)' class='showFullTextLink'>Show full text</a>");
+    // Counter badge
+    const $counter = $(`<span class="bda-desc-card__count">${$addItems.length} items in ${nbTypes} descriptor(s)</span>`);
+    $legend.find('.bda-desc-legend__actions').prepend($counter);
+
+    // Show raw xml link
+    $legend.find('.bda-desc-legend__actions').append("<a href='javascript:void(0)' id='rawXmlLink'><i class='fa fa-code'></i> Show raw XML</a>");
+
+    // Show full text link
+    if ($grid.find('.copyField').length > 0) {
+      $legend.find('.bda-desc-legend__actions').append("<a href='javascript:void(0)' class='showFullTextLink'><i class='fa fa-expand'></i> Show full text</a>");
+      let fullTextShown = false;
+      const savedHtml = new Map<HTMLElement, string>();
       $outputDiv.find('.showFullTextLink').on('click', function () {
-        $('.copyField').each((_, el) => $(el).parent().html($(el).html()));
-        $(this).hide();
+        fullTextShown = !fullTextShown;
+        if (fullTextShown) {
+          $grid.find('.copyField').each((_, el) => {
+            const $parent = $(el).parent();
+            savedHtml.set($parent[0], $parent.html());
+            $parent.html($(el).html());
+          });
+        } else {
+          savedHtml.forEach((html, el) => $(el).html(html));
+        }
+        $(this).html(fullTextShown
+          ? "<i class='fa fa-compress'></i> Hide full text"
+          : "<i class='fa fa-expand'></i> Show full text");
       });
     }
 
-    $('.loadable_property').on('click', (e) => {
+    // Per-card property search
+    $grid.on('input', '.bda-desc-card__search-input', function () {
+      const term = ($(this).val() as string).toLowerCase();
+      const $table = $(this).closest('.bda-desc-card__body').find('table');
+      $table.find('tr').each(function () {
+        const $row = $(this);
+        const propName = $row.find('.bda-desc-card__prop-name').text().toLowerCase();
+        const propKey = $row.find('.bda-desc-card__prop-key').text().toLowerCase();
+        $row.toggle(!term || propName.includes(term) || propKey.includes(term));
+      });
+    });
+
+    // Minimize / Close card buttons
+    $grid.on('click', '.bda-desc-card__btn--minimize', function () {
+      const $card = $(this).closest('.bda-desc-card');
+      const $body = $card.find('.bda-desc-card__body');
+      $body.toggle();
+      const isMinimized = !$body.is(':visible');
+      $(this).find('i').toggleClass('fa-minus', !isMinimized).toggleClass('fa-plus', isMinimized);
+      $(this).attr('title', isMinimized ? 'Expand' : 'Minimize');
+    });
+
+    $grid.on('click', '.bda-desc-card__btn--close', function () {
+      $(this).closest('.bda-desc-card').remove();
+    });
+
+    // Loadable property click
+    $grid.on('click', '.loadable_property', (e) => {
       const $elm = $(e.currentTarget);
       const id = $elm.attr('data-id') ?? '';
       const desc = $elm.attr('data-descriptor') ?? '';
@@ -1039,6 +1204,13 @@ export class BdaRepository {
           { label: 'Cancel' },
         ],
       });
+    });
+
+    // Copy link toggle
+    $grid.on('click', '.copyLink', function () {
+      const id = ($(this).attr('id') ?? '').replace('link_', '').replace(/(:|\.|\[|\]|,)/g, '\\$1');
+      $(`#${id}`).toggle();
+      $(`#text_${id}`).toggle();
     });
 
     if (isItemTree) this.createSpeedbar();
