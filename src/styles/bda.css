@@ -3903,6 +3903,17 @@ form input[type="submit"]:not(:first-of-type):hover {
   margin: 0;
 }
 
+.bda-cmpn-search-loading {
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--bda-slate-500);
+  font-size: var(--bda-font-size-sm);
+}
+
+.bda-cmpn-search-loading i {
+  margin-right: 6px;
+}
+
 .bda-cmpn-search-empty__hint {
   font-size: var(--bda-font-size-xs);
   color: var(--bda-slate-400) !important;
