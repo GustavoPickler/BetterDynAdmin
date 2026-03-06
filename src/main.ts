@@ -22,6 +22,7 @@ import { BdaCompConfig } from './modules/compconfig';
 import { BdaSearch } from './modules/search';
 import { BdaDash } from './modules/dash';
 import { BdaScheduler } from './modules/scheduler';
+import { BdaComponentSearch } from './modules/componentsearch';
 import { bdaStorage } from './core/storage';
 import { bdaKeyboard } from './core/keyboard';
 
@@ -488,6 +489,7 @@ function init(): void {
   }
 
   // Init modules
+  new BdaComponentSearch().init();
   new BdaCompConfig().init();
   new BdaRepository().init();
   new BdaPipeline().init();
