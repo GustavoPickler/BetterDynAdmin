@@ -116,7 +116,7 @@ export class BdaRepository {
 
     $('table:eq(0)').attr('id', 'descriptorTable');
 
-    $("<div id='RQLEditor'></div>").insertBefore('h2:first');
+    $("<div id='RQLEditor' class='bda-card'></div>").insertBefore('h2:first');
     $("<div id='RQLResults'></div>").insertBefore('#RQLEditor');
 
     if (hasErrors) this.showRqlErrors();
@@ -128,7 +128,7 @@ export class BdaRepository {
     $('#RQLForm').empty().append($children);
     $('textarea[name=xmltext]').attr('id', 'xmltext');
 
-    const actionSelect = `<select id='RQLAction' class='js-example-basic-single' style='width:170px'>
+    const actionSelect = `<select id='RQLAction' class='bda-select js-example-basic-single' style='width:170px'>
       <optgroup label='Empty queries'>
         <option value='print-item'>print-item</option>
         <option value='query-items'>query-items</option>
@@ -142,15 +142,22 @@ export class BdaRepository {
       </optgroup>
     </select>`;
 
+    // Remove the original ATG h2 heading (replaced by styled header below)
+    $("h2:contains('Run XML Operation Tags on the Repository')").remove();
+
+    // Dark section header for XML operations
+    $("<div class='bda-section-header bda-section-header--dark'><h3 class='bda-section-header__title'><i class='fa fa-terminal'></i> Run XML Operation Tags on the Repository</h3></div>")
+      .prependTo('#RQLEditor');
+
     $("<div id='RQLToolbar'></div>")
       .append(
-        `<div> Action : ${actionSelect} <span id='editor'>` +
-        `<span id='itemIdField'>ids : <input type='text' id='itemId' class='bda-input' placeholder='Id1,Id2,Id3' /></span>` +
-        `<span id='itemDescriptorField'> descriptor : <select id='itemDescriptor' class='itemDescriptor'>${this.getDescriptorOptions()}</select></span>` +
+        `<div class='bda-input-field'><label class='bda-input-field__label'>Action</label>${actionSelect}</div>` +
+        `<div class='bda-input-field' id='itemIdField'><label class='bda-input-field__label'>IDs</label><input type='text' id='itemId' class='bda-input' placeholder='Id1, Id2, Id3' /></div>` +
+        `<div class='bda-input-field' id='itemDescriptorField'><label class='bda-input-field__label'>Descriptor</label><select id='itemDescriptor' class='bda-select itemDescriptor'>${this.getDescriptorOptions()}</select></div>` +
         `<span id='idOnlyField' style='display:none;'><label for='idOnly'>&nbsp;id only : </label><input type='checkbox' id='idOnly' /></span>` +
-        `</span>` +
-        `<button type='button' id='RQLAdd' class='bda-btn'>Add</button>` +
-        `<button type='button' id='RQLGo' class='bda-btn bda-btn--primary'>Add &amp; Enter <i class='fa fa-play fa-x'></i></button>` +
+        `<div style='display:flex;gap:8px;align-items:flex-end;padding-bottom:2px'>` +
+        `<button type='button' id='RQLAdd' class='bda-btn bda-btn--secondary'>Add</button>` +
+        `<button type='button' id='RQLGo' class='bda-btn bda-btn--primary'>Add &amp; Enter <i class='fa fa-play'></i></button>` +
         `</div>`,
       )
       .insertBefore('#RQLEditor textarea')
@@ -164,10 +171,15 @@ export class BdaRepository {
       "<li id='propertiesTab' class='bda-tabs__item bda-tabs__item--active'>Properties</li>" +
       "<li id='queriesTab' class='bda-tabs__item'>Stored Queries</li>" +
       '</ul>' +
-      "<div id='storedQueries'><i>No stored query for this repository</i></div>" +
+      "<div id='storedQueries'><div class='bda-empty-state'><p>No saved queries yet</p><p class='bda-empty-state__hint'>Use \"Name this query\" below and click Save</p></div></div>" +
       "<div id='descProperties'><i>Select a descriptor to see his properties</i></div>" +
       '</div>',
     );
+
+    // Wrap CodeMirror + Properties/Queries in a grid container
+    const $editorGrid = $('<div class="bda-rql-editor-grid"></div>');
+    $('#RQLText').before($editorGrid);
+    $editorGrid.append($('#RQLText'), $('#tabs'));
 
     $('#RQLForm input[type=submit]').remove();
 
@@ -176,13 +188,14 @@ export class BdaRepository {
     const isChecked = splitObj?.activeSplit ?? false;
     const checkboxSplit = `<input type='checkbox' id='noSplit' ${isChecked ? 'checked' : ''} /> don't split.`;
 
-    $('#tabs').after(
+    $editorGrid.after(
       "<div id='RQLSave'>" +
-      `<div style='display:inline-block;width:200px'><button id='clearQuery' type='button' class='bda-btn'>Clear <i class='fa fa-ban fa-x'></i></button></div>` +
-      `<div style='display:inline-block;width:530px'>Split tab every : <input type='text' value='${itemByTab}' id='splitValue' class='bda-input' style='height:auto;'> items. ${checkboxSplit}</div>` +
-      `<button type='submit' id='RQLSubmit' class='bda-btn bda-btn--primary'>Enter <i class='fa fa-play fa-x'></i></button>` +
-      '</div>' +
-      `<div><input placeholder='Name this query' type='text' id='queryLabel' class='bda-input' style='height:auto;'>&nbsp;<button type='button' id='saveQuery' class='bda-btn'>Save <i class='fa fa-save fa-x'></i></button></div>`,
+      `<button id='clearQuery' type='button' class='bda-btn'>Clear <i class='fa fa-ban'></i></button>` +
+      `<span class='rql-split-label'>Split tab every: <input type='text' value='${itemByTab}' id='splitValue' class='bda-input rql-split-input'> items. ${checkboxSplit}</span>` +
+      `<input placeholder='Name this query' type='text' id='queryLabel' class='bda-input rql-name-input'>` +
+      `<button type='button' id='saveQuery' class='bda-btn'>Save <i class='fa fa-save'></i></button>` +
+      `<button type='submit' id='RQLSubmit' class='bda-btn bda-btn--primary'>Enter <i class='fa fa-play'></i></button>` +
+      '</div>',
     );
 
     this.showQueryList();
@@ -304,33 +317,67 @@ export class BdaRepository {
   private setupToggleSections(): void {
     const toggleObj = bdaStorage.getToggleObj() as Record<string, number>;
 
-    const makeLink = (id: string) =>
-      `&nbsp;<a href='javascript:void(0)' id='${id}' class='showMore'>${toggleObj[id] === 1 ? 'Show less...' : 'Show more...'}</a>`;
+    const makeToggleBtn = (id: string) =>
+      `<button id='${id}' class='bda-btn bda-btn--outline bda-btn--sm bda-toggle-btn'>${toggleObj[id] === 1 ? 'Show less...' : 'Show more...'}</button>`;
 
-    $(this.repositoryViewSelector).append(makeLink('showMoreRepositoryView'));
-    if (toggleObj['showMoreRepositoryView'] === 0) this.toggleRepositoryView();
-    $('#showMoreRepositoryView').on('click', () => this.toggleRepositoryView());
+    // --- Repository View — wrap h2 + its siblings in a section card ---
+    const $rvH2 = $(this.repositoryViewSelector);
+    if ($rvH2.length > 0) {
+      const $rvCard = $('<div class="bda-section-card"></div>');
+      const $rvHeader = $('<div class="bda-section-card__header"></div>');
+      $rvHeader.append('<h2><i class="fa fa-eye"></i> Examine the Repository, Control Debugging</h2>');
+      $rvHeader.append(makeToggleBtn('showMoreRepositoryView'));
 
-    $(this.cacheUsageSelector).append(makeLink('showMoreCacheUsage'));
+      const $rvBody = $('<div class="bda-section-card__body"></div>');
+      // Collect all siblings between this h2 and the next major section
+      let $next = $rvH2.next();
+      while ($next.length > 0 && !$next.is('h1, h2, #itemTree, #RQLEditor, .bda-cache-card, .bda-section-card')) {
+        const $move = $next;
+        $next = $next.next();
+        $rvBody.append($move);
+      }
+
+      $rvCard.append($rvHeader, $rvBody);
+      $rvH2.before($rvCard);
+      $rvH2.remove();
+
+      // Default collapsed
+      if (toggleObj['showMoreRepositoryView'] !== 1) $rvBody.hide();
+      $('#showMoreRepositoryView').on('click', () => this.toggleSection('showMoreRepositoryView', 'showMoreRepositoryView'));
+    }
+
+    // --- Cache Usage (toggle the .bda-cache-card body) ---
+    // The toggle button is added to the cache card header (built in setupRepositoryCacheSection)
+    const $cacheCardHeader = $('.bda-cache-header__actions');
+    if ($cacheCardHeader.length) {
+      $(makeToggleBtn('showMoreCacheUsage')).prependTo($cacheCardHeader);
+    } else {
+      $(this.cacheUsageSelector).append(makeToggleBtn('showMoreCacheUsage'));
+    }
     if (toggleObj['showMoreCacheUsage'] !== 1) this.toggleCacheUsage();
     $('#showMoreCacheUsage').on('click', () => this.toggleCacheUsage());
 
-    $(this.propertiesSelector).append(makeLink('showMoreProperties'));
+    // --- Properties, Event Sets, Methods (h1-based, will be wrapped in card later) ---
+    // DON'T toggle at setup time — normalizeAtgSectionTables will wrap these in cards.
+    // Instead, mark the h1 with data-bda-collapsed so the card wrapper can set initial state.
+
+    $(this.propertiesSelector).append(makeToggleBtn('showMoreProperties'));
     const $propsTable = $(this.propertiesSelector).next('table');
     if ($propsTable.length > 0) {
       this.simplifyClassNames($propsTable);
       this.simplifyPropertyType($propsTable);
       this.formatAttributes($propsTable);
+      this.normalizeLegacyTable($propsTable);
     }
-    if (toggleObj['showMoreProperties'] !== 1) this.toggleProperties();
+    if (toggleObj['showMoreProperties'] !== 1) $(this.propertiesSelector).attr('data-bda-collapsed', 'true');
     $('#showMoreProperties').on('click', () => this.toggleProperties());
 
-    $(this.eventSetsSelector).append(makeLink('showMoreEventsSets'));
-    if (toggleObj['showMoreEventsSets'] !== 1) this.toggleEventSets();
+    $(this.eventSetsSelector).append(makeToggleBtn('showMoreEventsSets'));
+    if (toggleObj['showMoreEventsSets'] !== 1) $(this.eventSetsSelector).attr('data-bda-collapsed', 'true');
     $('#showMoreEventsSets').on('click', () => this.toggleEventSets());
 
-    $(this.methodsSelector).append(makeLink('showMoreMethods'));
-    if (toggleObj['showMoreMethods'] !== 1) this.toggleMethods();
+    $(this.methodsSelector).append(makeToggleBtn('showMoreMethods'));
+    if (toggleObj['showMoreMethods'] !== 1) $(this.methodsSelector).attr('data-bda-collapsed', 'true');
     $('#showMoreMethods').on('click', () => this.toggleMethods());
   }
 
@@ -338,35 +385,59 @@ export class BdaRepository {
     $(selector).html(contentDisplay === 'none' ? 'Show more...' : 'Show less...');
   }
 
+  /**
+   * Find the toggleable content for a section.
+   * After normalizeAtgSectionTables() runs, the h1 is replaced by a .bda-section-card
+   * with .bda-section-card__body. We look for the card body first, then fall back
+   * to the old .next() approach for non-card pages.
+   */
+  private findToggleContent(btnId: string): JQuery {
+    const $btn = $(`#${btnId}`);
+    const $card = $btn.closest('.bda-section-card');
+    if ($card.length > 0) {
+      return $card.find('.bda-section-card__body');
+    }
+    // Fallback for non-card (h1/h2 based) structure
+    return $btn.parent().next();
+  }
+
+  private toggleSection(btnId: string, storageKey: string): void {
+    const $content = this.findToggleContent(btnId);
+    $content.toggle();
+    const display = $content.css('display');
+    this.updateToggleLabel(display, `#${btnId}`);
+    bdaStorage.storeToggleState(storageKey, display);
+  }
+
   private toggleRepositoryView(): void {
-    $(this.repositoryViewSelector).next().toggle().next().toggle();
-    this.updateToggleLabel($(this.repositoryViewSelector).next().css('display'), '#showMoreRepositoryView');
-    bdaStorage.storeToggleState('showMoreRepositoryView', $(this.repositoryViewSelector).next().css('display'));
+    this.toggleSection('showMoreRepositoryView', 'showMoreRepositoryView');
   }
 
   private toggleCacheUsage(): void {
-    const $cu = $(this.cacheUsageSelector);
-    $cu.next().toggle().next().toggle();
-    this.updateToggleLabel($cu.next().css('display'), '#showMoreCacheUsage');
-    bdaStorage.storeToggleState('showMoreCacheUsage', $cu.next().css('display'));
+    const $cacheBody = $('.bda-cache-card .bda-cache-body');
+    if ($cacheBody.length > 0) {
+      $cacheBody.toggle();
+      this.updateToggleLabel($cacheBody.css('display'), '#showMoreCacheUsage');
+      bdaStorage.storeToggleState('showMoreCacheUsage', $cacheBody.css('display'));
+    } else {
+      // Fallback for non-card structure
+      const $cu = $(this.cacheUsageSelector);
+      $cu.next().toggle().next().toggle();
+      this.updateToggleLabel($cu.next().css('display'), '#showMoreCacheUsage');
+      bdaStorage.storeToggleState('showMoreCacheUsage', $cu.next().css('display'));
+    }
   }
 
   private toggleProperties(): void {
-    $(this.propertiesSelector).next().toggle();
-    this.updateToggleLabel($(this.propertiesSelector).next().css('display'), '#showMoreProperties');
-    bdaStorage.storeToggleState('showMoreProperties', $(this.propertiesSelector).next().css('display'));
+    this.toggleSection('showMoreProperties', 'showMoreProperties');
   }
 
   private toggleEventSets(): void {
-    $(this.eventSetsSelector).next().toggle();
-    this.updateToggleLabel($(this.eventSetsSelector).next().css('display'), '#showMoreEventsSets');
-    bdaStorage.storeToggleState('showMoreEventsSets', $(this.eventSetsSelector).next().css('display'));
+    this.toggleSection('showMoreEventsSets', 'showMoreEventsSets');
   }
 
   private toggleMethods(): void {
-    $(this.methodsSelector).next().toggle();
-    this.updateToggleLabel($(this.methodsSelector).next().css('display'), '#showMoreMethods');
-    bdaStorage.storeToggleState('showMoreMethods', $(this.methodsSelector).next().css('display'));
+    this.toggleSection('showMoreMethods', 'showMoreMethods');
   }
 
   private toggleRawXml(): void {
@@ -402,31 +473,37 @@ export class BdaRepository {
   private setupItemDescriptorTable(): void {
     const descriptors = this.getDescriptorList();
     const componentURI = window.location.pathname;
-    const splitValue = 20;
-    let html = `<p>${descriptors.length} descriptors available.</p><div>`;
 
-    descriptors.forEach((d, i) => {
-      if (i === 0 || i % splitValue === 0) {
-        html += "<table class='descriptorTable'><th>Descriptor</th><th>View</th><th>Debug</th>";
-      }
-      const rowClass = i % 2 === 0 ? 'even' : 'odd';
+    let html = '<div id="bdaDescriptorCard" style="padding:16px">';
+    html += `<div style="margin-bottom:12px"><span class="bda-badge bda-badge--info">${descriptors.length} descriptors</span></div>`;
+    html += '<div style="background:var(--bda-slate-50);border-radius:var(--bda-radius-md);border:1px solid var(--bda-slate-200);margin:0;overflow:hidden">';
+
+    // Table header
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:10px 16px;background:var(--bda-slate-100);border-bottom:1px solid var(--bda-slate-200)">';
+    html += '<div style="font-size:11px;font-weight:600;color:var(--bda-slate-500);text-transform:uppercase;letter-spacing:0.05em">Descriptor</div>';
+    html += '<div style="font-size:11px;font-weight:600;color:var(--bda-slate-500);text-transform:uppercase;letter-spacing:0.05em">View</div>';
+    html += '<div style="font-size:11px;font-weight:600;color:var(--bda-slate-500);text-transform:uppercase;letter-spacing:0.05em">Debug</div>';
+    html += '</div>';
+
+    // Table body
+    html += '<div style="max-height:500px;overflow-y:auto">';
+    descriptors.forEach((d) => {
       const isDebugEnabled = $(`a[href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors']`).length > 0;
-      html += `<tr class='${rowClass}'>`;
-      html += `<td class='descriptor'>${d}</td>`;
-      html += `<td><a class='bda-btn bda-btn--sm' href='${componentURI}?action=seetmpl&itemdesc=${d}#showProperties'>Properties</a>`;
-      html += `&nbsp;<a class='bda-btn bda-btn--sm' href='${componentURI}?action=seenamed&itemdesc=${d}#namedQuery'>Named queries</a></td>`;
-      html += '<td>';
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:10px 16px;border-bottom:1px solid var(--bda-slate-100);align-items:center;transition:background 0.15s" onmouseover="this.style.background='var(--bda-white)'" onmouseout="this.style.background='transparent'">`;
+      html += `<div><span style="font-family:var(--bda-font-mono);font-size:var(--bda-font-size-sm);color:var(--bda-slate-700)">${d}</span></div>`;
+      html += `<div style="display:flex;gap:8px"><a class='bda-btn bda-btn--outline bda-btn--sm' href='${componentURI}?action=seetmpl&itemdesc=${d}#showProperties'>Properties</a>`;
+      html += `<a class='bda-btn bda-btn--outline bda-btn--sm' href='${componentURI}?action=seenamed&itemdesc=${d}#namedQuery'>Named queries</a></div>`;
+      html += '<div style="display:flex;gap:8px">';
       if (isDebugEnabled) {
-        html += `<a class='bda-btn bda-btn--sm bda-btn--danger' href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors'>Disable</a>`;
+        html += `<a class='bda-btn bda-btn--outline bda-btn--sm' href='${componentURI}?action=clriddbg&itemdesc=${d}#listItemDescriptors'><i class='fa fa-toggle-on'></i> Disable</a>`;
       } else {
-        html += `<a class='bda-btn bda-btn--sm' href='${componentURI}?action=setiddbg&itemdesc=${d}#listItemDescriptors'>Enable</a>`;
-        html += `&nbsp;<a class='bda-btn bda-btn--sm' href='${componentURI}?action=dbgprops&itemdesc=${d}#debugProperties'>Edit</a>`;
+        html += `<a class='bda-btn bda-btn--outline bda-btn--sm' href='${componentURI}?action=setiddbg&itemdesc=${d}#listItemDescriptors'><i class='fa fa-toggle-off'></i> Enable</a>`;
+        html += `<a class='bda-btn bda-btn--outline bda-btn--sm' href='${componentURI}?action=dbgprops&itemdesc=${d}#debugProperties'><i class='fa fa-pencil'></i> Edit</a>`;
       }
-      html += '</td></tr>';
-      if (i !== 0 && ((i + 1) % splitValue === 0 || i + 1 === descriptors.length)) html += '</table>';
+      html += '</div></div>';
     });
+    html += '</div></div></div>';
 
-    html += '</div><div style="clear:both" />';
     $('#descriptorTable').remove();
     $(html).insertAfter("a[name='listItemDescriptors']");
   }
@@ -437,7 +514,7 @@ export class BdaRepository {
       this.simplifyClassNames($('#propertiesTable'));
       this.simplifyPropertyType($('#propertiesTable'));
       this.formatAttributes($('#propertiesTable'));
-      $('#propertiesTable').find('tr:nth-child(odd)').addClass('odd');
+      this.normalizeLegacyTable($('#propertiesTable'));
     }
   }
 
@@ -474,6 +551,13 @@ export class BdaRepository {
         $td.html(html);
       }
     });
+  }
+
+  private normalizeLegacyTable($table: JQuery): void {
+    $table.addClass('bda-section-table').removeAttr('style').removeAttr('bgcolor').removeAttr('background');
+    $table.find('tr, td, th').removeAttr('bgcolor').removeAttr('background').removeAttr('valign').removeAttr('style');
+    $table.find('tr:first-child td, tr:first-child th').addClass('bda-section-table__header');
+    $table.find('tr.even td, tr.even th').addClass('bda-section-table__alt');
   }
 
   private simplifyPropertyType($table: JQuery): void {
@@ -663,8 +747,10 @@ export class BdaRepository {
         if (!('repo' in q) || (q as unknown as Record<string, string>)['repo'] === currComponentName) {
           const escapedQuery = $('<div>').text(q.query).html();
           html += `<li class='savedQuery'><a href='javascript:void(0)'>${q.name}</a>`;
-          html += `<span id='previewQuery${i}' class='previewQuery'><i class='fa fa-eye'></i></span>`;
-          html += `<span id='deleteQuery${i}' class='deleteQuery'><i class='fa fa-trash-o'></i></span>`;
+          html += `<span class='bda-query-actions'>`;
+          html += `<span id='previewQuery${i}' class='previewQuery' title='Preview query'><i class='fa fa-eye'></i></span>`;
+          html += `<span id='deleteQuery${i}' class='deleteQuery' title='Delete query'><i class='fa fa-trash-o'></i></span>`;
+          html += `</span>`;
           html += `<span id='queryView${i}' class='queryView'><pre>${escapedQuery}</pre></span></li>`;
           nbQuery++;
         }
@@ -677,19 +763,20 @@ export class BdaRepository {
       $('#storedQueries .queryView').each((_, block) => hljs.highlightBlock(block));
     }
 
-    $('.savedQuery').on('click', (e) => {
-      const name = $(e.currentTarget).find('a').html();
+    $('.savedQuery > a').on('click', (e) => {
+      const name = $(e.currentTarget).html();
       const q = bdaStorage.getStoredRQLQueries().find((q) => q.name === name);
       if (q) this.setQueryEditorValue(q.query + '\n');
     });
 
     $('.previewQuery').on('mouseenter', function () {
-      $(this).parent('li').find('span.queryView').show();
+      $(this).closest('li').find('span.queryView').show();
     }).on('mouseleave', function () {
-      $(this).parent('li').find('span.queryView').hide();
+      $(this).closest('li').find('span.queryView').hide();
     });
 
     $('.deleteQuery').on('click', (e) => {
+      e.stopPropagation();
       const index = parseInt(e.currentTarget.id.replace('deleteQuery', ''));
       bdaStorage.deleteQuery(index);
       this.reloadQueryList();
@@ -1002,35 +1089,63 @@ export class BdaRepository {
   // -------------------------------------------------------------------------
 
   private setupItemTreeForm(): void {
-    $("<div id='itemTree' />").insertAfter('#RQLEditor');
-    const $itemTree = $('#itemTree');
-    $itemTree.append('<h2>Get Item Tree</h2>');
-    $itemTree.append(
-      '<p>This tool will recursively retrieve items and print the result with the chosen output.' +
-      '<br> For example, if you give an order ID in the form below, you will get all shipping groups, payment groups, commerceItems, priceInfo... of the given order' +
-      '<br><b> Be careful when using this tool on a live instance ! Set a low max items value.</b></p>',
+    const $card = $('<div id="itemTree" class="bda-card"></div>').insertAfter('#RQLEditor');
+
+    // Header
+    $card.append(
+      "<div class='bda-section-header'>" +
+      "<h3 class='bda-section-header__title'><i class='fa fa-sitemap'></i> Get Item Tree</h3>" +
+      '</div>',
     );
-    $itemTree.append(
+
+    // Warning box
+    $card.append(
+      "<div class='bda-item-tree-alert'>" +
+      "<div class='bda-item-tree-alert__content'>" +
+      "<i class='fa fa-info-circle bda-item-tree-alert__icon'></i>" +
+      "<div>" +
+      "<p>This tool will recursively retrieve items and print the result with the chosen output.</p>" +
+      "<p>For example, if you give an order ID in the form below, you will get all shipping groups, payment groups, commerceItems, priceInfo... of the given order</p>" +
+      '</div>' +
+      '</div>' +
+      "<p class='bda-item-tree-alert__warning'><i class='fa fa-exclamation-triangle'></i> Be careful when using this tool on a live instance! Set a low max items value.</p>" +
+      '</div>',
+    );
+
+    // Form grid
+    $card.append(
       "<div id='itemTreeForm'>" +
-      "id : <input type='text' id='itemTreeId' /> &nbsp;" +
-      "descriptor : <span id='itemTreeDescriptorField'><select id='itemTreeDesc' class='itemDescriptor'>" +
+      "<div class='bda-item-tree-grid'>" +
+      "<div class='bda-input-field'><label class='bda-input-field__label'>ID</label>" +
+      "<input type='text' id='itemTreeId' class='bda-input' placeholder='Enter item ID' /></div>" +
+      "<div class='bda-input-field'><label class='bda-input-field__label'>Descriptor</label>" +
+      "<span id='itemTreeDescriptorField'><select id='itemTreeDesc' class='bda-select itemDescriptor'>" +
       this.getDescriptorOptions() +
-      "</select></span>" +
-      "max items : <input type='text' id='itemTreeMax' value='50' />&nbsp;<br><br>" +
-      "output format : <select id='itemTreeOutput'>" +
+      '</select></span></div>' +
+      "<div class='bda-input-field'><label class='bda-input-field__label'>Max Items</label>" +
+      "<input type='text' id='itemTreeMax' class='bda-input' value='50' /></div>" +
+      "<div class='bda-input-field'><label class='bda-input-field__label'>Output Format</label>" +
+      "<select id='itemTreeOutput' class='bda-select'>" +
       "<option value='HTMLtab'>HTML tab</option>" +
       "<option value='addItem'>add-item XML</option>" +
       "<option value='removeItem'>remove-item XML</option>" +
       "<option value='printItem'>print-item XML</option>" +
       "<option value='tree'>Tree (experimental)</option>" +
-      "</select>&nbsp;" +
-      "<input type='checkbox' id='printRepositoryAttr' /><label for='printRepositoryAttr'>Print attribute : </label>" +
-      `<pre style='margin:0; display:inline;'>repository='${getCurrentComponentPath()}'</pre> <br><br>` +
-      "<button id='itemTreeBtn' class='bda-btn bda-btn--primary'>Enter <i class='fa fa-play fa-x'></i></button>" +
+      '</select></div>' +
+      '</div>' +
+      "<div class='bda-item-tree-actions'>" +
+      "<label class='bda-item-tree-checkbox'>" +
+      "<input type='checkbox' id='printRepositoryAttr' />" +
+      "<span>Print attribute:</span>" +
+      `<code>repository='${getCurrentComponentPath()}'</code>` +
+      '</label>' +
+      "<button id='itemTreeBtn' class='bda-btn bda-btn--primary'>Enter <i class='fa fa-play'></i></button>" +
+      '</div>' +
       '</div>',
     );
-    $itemTree.append("<div id='itemTreeInfo' />");
-    $itemTree.append("<div id='itemTreeResult' />");
+
+    $card.append("<div id='itemTreeInfo' />");
+    $card.append("<div id='itemTreeResult' />");
 
     $('#itemTreeBtn').on('click', () => {
       this.getItemTree(
@@ -1251,7 +1366,35 @@ export class BdaRepository {
       const $cacheTable = $cacheUsage.next().next().find('table');
       if ($cacheTable.length === 0) return;
 
-      $cacheTable.addClass('cache').removeAttr('border');
+      // Wrap everything in a card
+      const $card = $('<div class="bda-card bda-cache-card"></div>');
+      const $headerDiv = $('<div class="bda-section-header bda-cache-header"></div>');
+      const $titleRow = $('<div class="bda-cache-header__row"></div>');
+      $titleRow.append('<h3 class="bda-section-header__title"><i class="fa fa-bar-chart"></i> Cache Usage Statistics</h3>');
+
+      const $actions = $('<div class="bda-cache-header__actions"></div>');
+      const $resetLink = $cacheUsage.next();
+      const $resetBtn = $resetLink.find('a').first();
+      if ($resetBtn.length) {
+        $resetBtn.addClass('bda-btn bda-btn--danger bda-btn--sm').detach().appendTo($actions);
+      }
+      $('<button></button>', { id: 'cacheExpandAll', class: 'bda-btn bda-btn--outline bda-btn--sm', html: '<i class="fa fa-expand"></i> Expand All' })
+        .on('click', () => { $cacheTable.find('tr.cache-subheader.collapsed').each((_, el) => this.toggleCacheLine(el)); })
+        .appendTo($actions);
+      $('<button></button>', { id: 'collapseAll', class: 'bda-btn bda-btn--outline bda-btn--sm', html: '<i class="fa fa-compress"></i> Collapse All' })
+        .on('click', () => { $cacheTable.find('tr.cache-subheader.expanded').each((_, el) => this.toggleCacheLine(el)); })
+        .appendTo($actions);
+      $('<button></button>', { id: 'exportCSV', class: 'bda-btn bda-btn--outline bda-btn--sm', html: '<i class="fa fa-download"></i> Export CSV' })
+        .on('click', () => this.exportCacheStatsAsCSV($cacheTable))
+        .appendTo($actions);
+
+      $titleRow.append($actions);
+      $headerDiv.append($titleRow);
+      $card.append($headerDiv);
+
+      // Move cache table into the card
+      const $cardBody = $('<div class="bda-cache-body"></div>');
+      $cacheTable.addClass('cache bda-section-table').removeAttr('border');
       const $header = $cacheTable.find('tr').first().detach();
       $('<thead></thead>').prependTo($cacheTable).append($header);
 
@@ -1260,22 +1403,23 @@ export class BdaRepository {
 
       this.setupCacheCollapse($header, $cacheTable);
 
-      const $resetLink = $cacheUsage.next();
-      const $buttons = $('<div></div>').appendTo($resetLink);
-      $('<button></button>', { id: 'cacheExpandAll', class: 'cache expand', html: 'Expand All' })
-        .on('click', () => { $cacheTable.find('tr.cache-subheader.collapsed').each((_, el) => this.toggleCacheLine(el)); })
-        .appendTo($buttons);
-      $('<button></button>', { id: 'collapseAll', class: 'cache collapse', html: 'Collapse All' })
-        .on('click', () => { $cacheTable.find('tr.cache-subheader.expanded').each((_, el) => this.toggleCacheLine(el)); })
-        .appendTo($buttons);
-      $('<button></button>', { id: 'exportCSV', class: 'cache export', html: 'Export as CSV' })
-        .on('click', () => this.exportCacheStatsAsCSV($cacheTable))
-        .appendTo($buttons);
-
       $cacheTable.addClass('fixed_headers');
       $cacheTable.find('.cache-subheader').each((_, el) => {
         $(el).addClass('collapsed').next().css('display', 'none').next().css('display', 'none');
       });
+
+      $cardBody.append($cacheTable);
+      $card.append($cardBody);
+
+      // Insert card and clean up old elements
+      // The ATG page has: h2 > (reset link div) > (table container)
+      // We need to remove the old h2 and its sibling wrapper, leaving only the card
+      const $oldResetWrapper = $cacheUsage.next();
+      const $oldTableWrapper = $oldResetWrapper.next();
+      $cacheUsage.before($card);
+      $oldTableWrapper.remove();
+      $oldResetWrapper.remove();
+      $cacheUsage.remove();
 
       console.timeEnd('setupRepositoryCacheSection');
     } catch (err) { console.error(err); }
@@ -1294,11 +1438,12 @@ export class BdaRepository {
       if (match) {
         const [, itemDesc = '', cacheMode = '', , cacheLocality = ''] = match;
         $tr.attr('data-item-desc', itemDesc).attr('data-cache-mode', cacheMode).attr('data-cache-locality', cacheLocality);
+        const cacheModeClass = cacheMode === 'disabled' ? ' bda-cache-attr-value--warning' : '';
         $td.html(
           `<span class="cacheArrow"><i class="fa fa-chevron-right"></i></span>` +
-          `<span> item-descriptor=<b>${itemDesc}</b></span>` +
-          `<span> cache-mode=<b>${cacheMode}</b></span>` +
-          (cacheLocality ? `<span> cache-locality=<b>${cacheLocality}</b></span>` : ''),
+          `<span class="bda-cache-attr">item-descriptor=</span><span class="bda-cache-descriptor-name">${itemDesc}</span>` +
+          `<span class="bda-cache-attr">cache-mode=</span><span class="bda-cache-attr-value${cacheModeClass}">${cacheMode}</span>` +
+          (cacheLocality ? `<span class="bda-cache-attr">cache-locality=</span><span class="bda-cache-attr-value">${cacheLocality}</span>` : ''),
         );
       }
       $tr.on('click', () => this.toggleCacheLine(el));

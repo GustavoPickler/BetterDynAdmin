@@ -65,9 +65,9 @@ export class BdaXmlDef {
       if ($root.length === 0) return;
 
       // Create tab container
-      const $tabContainer = $('<div class="bda-xml-def-tabs twbs"></div>');
-      const $tabNav = $('<ul class="nav nav-tabs"></ul>');
-      const $tabContent = $('<div class="tab-content"></div>');
+      const $tabContainer = $('<div class="bda-xml-def-tabs bda-card"></div>');
+      const $tabNav = $('<ul class="nav nav-tabs twbs"></ul>');
+      const $tabContent = $('<div class="tab-content twbs"></div>');
 
       $tabContainer.append($tabNav, $tabContent);
 
@@ -108,13 +108,13 @@ export class BdaXmlDef {
 
       const $panel = $(
         formatString(
-          '<div id="item_{0}" class="panel panel-default item-panel" data-item-descriptor="{0}"></div>',
+          '<div id="item_{0}" class="bda-card item-panel" data-item-descriptor="{0}"></div>',
           descriptorName,
         ),
       );
 
       const $heading = $(
-        `<div class="panel-heading item-descriptor-heading"><h4>${descriptorName}</h4></div>`,
+        `<div class="bda-section-header item-descriptor-heading"><h3 class="bda-section-header__title"><i class="fa fa-cube"></i> ${descriptorName}</h3></div>`,
       );
 
       // Super-type link
@@ -127,14 +127,14 @@ export class BdaXmlDef {
       const cacheMode = $desc.attr('cache-mode');
       const cacheSize = $desc.attr('item-cache-size');
       const cacheTimeout = $desc.attr('item-cache-timeout');
-      if (cacheMode) $heading.append(` <span class="label label-default">cache: ${cacheMode}</span>`);
-      if (cacheSize) $heading.append(` <span class="label label-info">size: ${cacheSize}</span>`);
-      if (cacheTimeout) $heading.append(` <span class="label label-info">timeout: ${cacheTimeout}s</span>`);
+      if (cacheMode) $heading.append(` <span class="bda-badge bda-badge--default">cache: ${cacheMode}</span>`);
+      if (cacheSize) $heading.append(` <span class="bda-badge bda-badge--info">size: ${cacheSize}</span>`);
+      if (cacheTimeout) $heading.append(` <span class="bda-badge bda-badge--info">timeout: ${cacheTimeout}s</span>`);
 
-      const $body = $('<div class="panel-body"></div>');
+      const $body = $('<div style="padding: 16px"></div>');
 
       // Properties table
-      const $table = $('<table class="table table-condensed table-bordered bda-props-table"><thead><tr><th>Name</th><th>Data/Item Type</th><th>Column</th><th>Property Type</th><th>Queryable</th><th>Writable</th></tr></thead><tbody></tbody></table>');
+      const $table = $('<table class="bda-section-table bda-props-table"><thead><tr><th class="bda-section-table__header">Name</th><th class="bda-section-table__header">Data/Item Type</th><th class="bda-section-table__header">Column</th><th class="bda-section-table__header">Property Type</th><th class="bda-section-table__header">Queryable</th><th class="bda-section-table__header">Writable</th></tr></thead><tbody></tbody></table>');
       const $tbody = $table.find('tbody');
 
       $desc.find('property').each(function () {

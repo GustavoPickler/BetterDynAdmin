@@ -70,7 +70,7 @@ export class BdaJdbc {
 
     if ($resultTable.length === 0) return;
 
-    const $btn = $('<button class="bda-button btn btn-default"><i class="fa fa-download"></i> Export CSV</button>');
+    const $btn = $('<button class="bda-btn bda-btn--secondary"><i class="fa fa-download"></i> Export CSV</button>');
     $btn.on('click', () => {
       const csv = ($resultTable as JQuery).toCSV();
       copyToClipboard(csv);

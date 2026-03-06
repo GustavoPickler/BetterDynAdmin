@@ -16,19 +16,21 @@ export class BdaMenu {
     console.time('bdaMenu');
     logTrace('BdaMenu init');
 
-    // Apply persisted dark mode before rendering UI
-    if (bdaStorage.getConfigurationValue('dark_mode') === true) {
-      $('body').addClass('bda-dark');
-    }
+    const $navbar = $('<nav id="bdaNavbar"></nav>').prependTo('body');
+    const $inner = $('<div class="bda-nav__inner"></div>').appendTo($navbar);
+    const $left = $('<div class="bda-nav__left"></div>').appendTo($inner);
 
-    const $navbar = $('<nav id="bdaNavbar"></nav>').appendTo('body');
-    const $left = $('<div class="bda-nav__left"></div>').appendTo($navbar);
-    $('<span class="bda-nav__brand">BDA</span>').appendTo($left);
+    // Brand with icon
+    const $brand = $('<div class="bda-nav__brand"></div>');
+    $brand.append(
+      '<div class="bda-nav__brand-icon"><i class="fa fa-database"></i></div>' +
+      '<div class="bda-nav__brand-text">Oracle<span>Commerce</span></div>',
+    );
+    $brand.appendTo($left);
     this.createSearchBox($left);
 
-    this.$navRight = $('<div class="bda-nav__right" id="bdaNavActions"></div>').appendTo($navbar);
+    this.$navRight = $('<div class="bda-nav__right" id="bdaNavActions"></div>').appendTo($inner);
     this.createAboutItem();
-    this.createConfigItem();
     this.createWhatsnewItem();
 
     // Close open dropdowns when clicking outside the navbar
@@ -75,8 +77,8 @@ export class BdaMenu {
   private createAboutItem(): void {
     const { $dropdown } = this.createNavItem('bdaBug', 'fa-info-circle', 'About');
     $dropdown.html(
-      `<p>Better Dyn Admin has a <a target='_blank' href='https://github.com/jc7447/BetterDynAdmin'>GitHub page</a>.<br>
-      Please report any bug in the <a target='_blank' href='https://github.com/jc7447/BetterDynAdmin/issues'>issues tracker</a>.
+      `<p>Better Dyn Admin has a <a target='_blank' href='https://github.com/GustavoPickler/BetterDynAdmin'>GitHub page</a>.<br>
+      Please report any bug in the <a target='_blank' href='https://github.com/GustavoPickler/BetterDynAdmin/issues'>issues tracker</a>.
       <br><br><strong>BDA version ${GM_info.script.version}</strong></p>`,
     );
   }
@@ -129,98 +131,6 @@ export class BdaMenu {
     });
   }
 
-  // -------------------------------------------------------------------------
-  // Configuration panel
-  // -------------------------------------------------------------------------
-
-  private createConfigItem(): void {
-    const { $dropdown } = this.createNavItem('bdaConfig', 'fa-cog', 'Config');
-
-    // Dark mode toggle
-    const isDarkMode = bdaStorage.getConfigurationValue('dark_mode') === true;
-    $dropdown.html(
-      `<p>Dark mode: <input type='checkbox' id='dark_mode_checkbox' ${isDarkMode ? 'checked' : ''}></p>`,
-    );
-    $('#dark_mode_checkbox').on('change', function () {
-      const checked = $(this).prop('checked') as boolean;
-      bdaStorage.storeConfiguration('dark_mode', checked);
-      $('body').toggleClass('bda-dark', checked);
-    });
-
-    // Mono-instance mode
-    const monoInstanceKey = 'mono_instance';
-    const isMonoInstance = GM_getValue(monoInstanceKey) === true;
-    $dropdown.append(
-      `<p>Same BDA data on every domain: <input type='checkbox' id='mono_instance_checkbox' ${isMonoInstance ? 'checked' : ''}></p>`,
-    );
-    $('#mono_instance_checkbox').on('change', function () {
-      const checked = $(this).prop('checked') as boolean;
-      GM_setValue(monoInstanceKey, checked);
-      if (checked) GM_setValue('BDA_GM_Backup', JSON.stringify(bdaStorage.getData()));
-    });
-
-    this.createCheckBoxConfig($dropdown, {
-      name: 'search_autocomplete',
-      description: 'Search AutoComplete',
-      message: '<p>Note: Reload dyn/admin to apply.</p>',
-    });
-
-    this.createCheckBoxConfig($dropdown, {
-      name: 'defaultOpenXmlDefAsTable',
-      description: 'Display XML Def as table by default',
-    });
-
-    this.createDefaultMethodsConfig($dropdown);
-    this.createDataSourceFolderConfig($dropdown);
-  }
-
-  private createCheckBoxConfig(
-    $parent: JQuery,
-    options: { name: string; description: string; message?: string },
-  ): void {
-    const value = bdaStorage.getConfigurationValue(options.name) === true;
-    const checked = value ? 'checked' : '';
-    $parent.append(
-      `<p class="config">${options.description}: <input type="checkbox" id="${options.name}_config" ${checked}/></p>${options.message ?? ''}`,
-    );
-    $(`#${options.name}_config`).on('change', function () {
-      bdaStorage.storeConfiguration(options.name, $(this).is(':checked'));
-    });
-  }
-
-  private createDefaultMethodsConfig($parent: JQuery): void {
-    const $config = $('<div id="advancedConfig"></div>').appendTo($parent);
-
-    const savedMethods = (bdaStorage.getConfigurationValue('default_methods') as string[] | null) ?? [];
-    $config.append(
-      `<p>Default methods when bookmarking:</p><textarea id='config-methods-data' placeholder='Comma separated'>${savedMethods.join(',')}</textarea>`,
-    );
-    $('<button class="bda-btn">Save methods</button>').on('click', () => {
-      const arr = ($('#config-methods-data').val() as string).replace(/ /g, '').split(',').filter(Boolean);
-      bdaStorage.storeConfiguration('default_methods', arr);
-    }).appendTo($config);
-
-    const savedProps = (bdaStorage.getConfigurationValue('default_properties') as string[] | null) ?? [];
-    $config.append(
-      `<p>Default properties when bookmarking:</p><textarea id='config-properties-data' placeholder='Comma separated'>${savedProps.join(',')}</textarea>`,
-    );
-    $('<button class="bda-btn">Save properties</button>').on('click', () => {
-      const arr = ($('#config-properties-data').val() as string).replace(/ /g, '').split(',').filter(Boolean);
-      bdaStorage.storeConfiguration('default_properties', arr);
-    }).appendTo($config);
-  }
-
-  private createDataSourceFolderConfig($parent: JQuery): void {
-    const $config = $('<div></div>').appendTo($parent);
-    const saved = (bdaStorage.getConfigurationValue('data_source_folder') as string | null) ?? '';
-    $config.append(
-      `<p>JDBC datasource folders:</p><textarea id='config-data-source-folders-data' placeholder='Comma separated paths'>${saved}</textarea>`,
-    );
-    $('<button class="bda-btn">Save folders</button>').on('click', () => {
-      const val = ($('#config-data-source-folders-data').val() as string).trim();
-      bdaStorage.storeConfiguration('data_source_folder', val);
-    }).appendTo($config);
-  }
 
   // -------------------------------------------------------------------------
   // Search box

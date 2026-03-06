@@ -30,13 +30,21 @@ export class BdaPerfMonitor {
 
     if ($table.length === 0) return;
 
+    // Wrap in card
+    const $card = $('<div class="bda-card"></div>').insertBefore($table);
+    $card.append(
+      '<div class="bda-section-header"><h3 class="bda-section-header__title"><i class="fa fa-tachometer"></i> Performance Data</h3></div>',
+    );
+    $card.append($table);
+    $table.addClass('bda-section-table');
+
     // Build a proper thead from the first row
     const $firstRow = $table.find('tr').first();
     const $thead = $('<thead></thead>');
     const $headerRow = $('<tr></tr>');
 
     $firstRow.find('td').each(function () {
-      $headerRow.append($('<th></th>').text($(this).text()));
+      $headerRow.append($('<th class="bda-section-table__header"></th>').text($(this).text()));
     });
 
     $thead.append($headerRow);

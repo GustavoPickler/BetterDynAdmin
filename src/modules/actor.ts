@@ -39,8 +39,8 @@ export class BdaActor {
     });
 
     const restEndpoint = `/rest/model${componentPath}`;
-    const $callerDiv = $('<div class="bda-actor-caller"></div>');
-    const $titleBar = $('<div class="bda-actor-title"></div>').text(`Call: ${chainId}`);
+    const $callerDiv = $('<div class="bda-actor-caller bda-card"></div>');
+    const $titleBar = $('<div class="bda-section-header"><h3 class="bda-section-header__title"><i class="fa fa-link"></i> Call: ' + chainId + '</h3></div>');
     const $endpointRow = $('<div class="bda-actor-endpoint"></div>');
     const $endpointLabel = $('<span>REST endpoint: </span>');
     const $endpointLink = $('<code></code>').text(restEndpoint);
@@ -62,7 +62,7 @@ export class BdaActor {
       $callerDiv.append($inputSection);
     }
 
-    const $callBtn = $('<button class="bda-btn bda-btn--primary">Call Chain</button>').on('click', () => {
+    const $callBtn = $('<button class="bda-btn bda-btn--primary"><i class="fa fa-play"></i> Call Chain</button>').on('click', () => {
       const params: Record<string, string> = {};
       $callerDiv.find('input[data-name]').each(function () {
         params[$(this).data('name') as string] = $(this).val() as string;

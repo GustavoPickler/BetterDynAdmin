@@ -60,7 +60,7 @@ export class BdaPipeline {
     const $h2 = $("h2:contains('Pipeline Chains')");
 
     const $content = $(
-      "<button id='schemeOrientation' class='bda-btn'>Switch orientation <i class='fa fa-retweet'></i></button>" +
+      "<button id='schemeOrientation' class='bda-btn bda-btn--secondary'>Switch orientation <i class='fa fa-retweet'></i></button>" +
       "<div id='pipelineScheme'></div>",
     );
     this.pipelineModal = new BdaModal({

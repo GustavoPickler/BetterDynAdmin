@@ -1,12 +1,9 @@
 // Global type definitions for BetterDynAdmin
 
 export interface BDAConfig {
-  componentBrowserPageSelector: string;
-  logoSelector: string;
   oldDynamoAltSelector: string[];
   isOldDynamo: boolean;
   isComponentPage: boolean;
-  dynAdminCssUri: string;
 }
 
 export interface StoredComponent {

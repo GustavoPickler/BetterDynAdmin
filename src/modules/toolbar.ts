@@ -56,12 +56,21 @@ export class BdaToolbar {
   }
 
   showComponentHistory(): void {
-    const $hist = $("<div id='history'></div>").insertAfter(this.bda.logoSelector);
+    // Create toolbar strip below the navbar
+    let $strip = $('.bda-toolbar-strip');
+    if ($strip.length === 0) {
+      $strip = $('<div class="bda-toolbar-strip"></div>').insertAfter('#bdaNavbar');
+      $('<div class="bda-toolbar-strip__inner"></div>').appendTo($strip);
+    }
+    const $inner = $strip.find('.bda-toolbar-strip__inner');
+
+    const $hist = $("<div id='history'></div>").appendTo($inner);
     const history: string[] = JSON.parse(localStorage.getItem('componentHistory') ?? '[]') as string[];
     if (history.length === 0) return;
     const $list = $('<div class="bda-history-list"></div>').appendTo($hist);
     history.forEach((comp) => {
-      $(`<a class="bda-history-pill" href="${comp}">${getComponentNameFromPath(comp)}</a>`).appendTo($list);
+      const name = getComponentNameFromPath(comp);
+      $(`<a class="bda-history-pill" href="${comp}" title="${name}"><span>${name}</span></a>`).appendTo($list);
     });
   }
 
@@ -149,7 +158,14 @@ export class BdaToolbar {
     this.addExistingTagsToToolbarPopup();
 
     const favs = bdaStorage.getStoredComponents();
-    $("<div id='toolbarContainer'></div>").insertAfter(this.bda.logoSelector);
+    // Put toolbar inside the toolbar strip
+    let $strip = $('.bda-toolbar-strip');
+    if ($strip.length === 0) {
+      $strip = $('<div class="bda-toolbar-strip"></div>').insertAfter('#bdaNavbar');
+      $('<div class="bda-toolbar-strip__inner"></div>').appendTo($strip);
+    }
+    const $inner = $strip.find('.bda-toolbar-strip__inner');
+    $("<div id='toolbarContainer'></div>").appendTo($inner);
     $("<div id='toolbar'></div>").appendTo('#toolbarContainer');
 
     const tags = bdaStorage.getTags() as unknown as ComponentTags;
