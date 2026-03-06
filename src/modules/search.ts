@@ -78,8 +78,10 @@ export class BdaSearch {
         limit: 20,
         source,
         templates: {
-          suggestion: (data: string) =>
-            `<div class="bda-search-suggestion">${data}</div>`,
+          suggestion: (data: string) => {
+            const display = data.replace(/^\/\/[^/]+/, '');
+            return `<div class="bda-search-suggestion" title="${data}">${display}</div>`;
+          },
         },
       },
     );

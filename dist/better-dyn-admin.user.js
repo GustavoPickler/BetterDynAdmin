@@ -975,7 +975,10 @@
           limit: 20,
           source,
           templates: {
-            suggestion: (data) => `<div class="bda-search-suggestion">${data}</div>`
+            suggestion: (data) => {
+              const display = data.replace(/^\/\/[^/]+/, "");
+              return `<div class="bda-search-suggestion" title="${data}">${display}</div>`;
+            }
           }
         }
       );
