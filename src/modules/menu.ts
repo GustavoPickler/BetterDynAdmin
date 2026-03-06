@@ -77,9 +77,10 @@ export class BdaMenu {
   private createAboutItem(): void {
     const { $dropdown } = this.createNavItem('bdaBug', 'fa-info-circle', 'About');
     $dropdown.html(
-      `<p>Better Dyn Admin has a <a target='_blank' href='https://github.com/GustavoPickler/BetterDynAdmin'>GitHub page</a>.<br>
-      Please report any bug in the <a target='_blank' href='https://github.com/GustavoPickler/BetterDynAdmin/issues'>issues tracker</a>.
-      <br><br><strong>BDA version ${GM_info.script.version}</strong></p>`,
+      `<p><strong>Better Dynamo Administration v${GM_info.script.version}</strong></p>` +
+      `<p>A userscript that modernizes the Oracle ATG Dynamo Admin UI with smarter search, repository cards, dark mode, and more.</p>` +
+      `<p><a target='_blank' href='https://github.com/GustavoPickler/BetterDynAdmin'>GitHub</a> &nbsp;·&nbsp; ` +
+      `<a target='_blank' href='https://github.com/GustavoPickler/BetterDynAdmin/issues'>Report a bug</a></p>`,
     );
   }
 

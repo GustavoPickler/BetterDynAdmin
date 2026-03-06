@@ -8,7 +8,7 @@ export default defineConfig({
       userscript: {
         name: 'Better Dynamo Administration v3 (TypeScript)',
         namespace: 'BetterDynAdmin',
-        version: '3.0.0',
+        version: '3.1.0',
         description: 'Refreshing ATG Dyn Admin',
         author: 'Gustavo Pickler',
         match: ['*/dyn/admin/*'],

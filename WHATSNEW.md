@@ -1,4 +1,4 @@
-<p><strong>Version 3.1 — Repository &amp; UX Improvements</strong></p>
+<p><strong>Version 3.1 — Repository, Search &amp; UX Improvements</strong></p>
 <ul>
   <li>[Repository] Descriptor results rendered as independent cards in a responsive 2-column grid</li>
   <li>[Repository] Per-card minimize / close controls with independent row heights</li>
@@ -7,11 +7,15 @@
   <li>[Repository] Structured raw XML viewer — collapsible per-item sections with search by ID</li>
   <li>[Repository] "Show full text" toggle for truncated property values (reversible)</li>
   <li>[Repository] Query editor normalizes blank lines — always adds exactly one blank line separator</li>
+  <li>[Repository] Clicking a property in the Properties tab appends to editor instead of overwriting</li>
+  <li>[Repository] Linked item IDs open an inline popover ("Add" / "Add &amp; Apply") instead of a modal</li>
   <li>[Repository] R / D / E badges on properties (read-only, derived, exportable)</li>
   <li>[Scheduler] Full redesign: card layout with search bar, clean date formatting, and footer counter</li>
   <li>[Scheduler] Timeline visualization powered by vis.js (toggle button)</li>
   <li>[Scheduler] Delete checked jobs button in footer</li>
   <li>[Component Search] Full page redesign — card layout, styled query form, results list with hover states</li>
+  <li>[Component Search] Case-insensitive search — "itaushop" finds ItauShopAdapter, etc.</li>
+  <li>[Global] Navbar search autocomplete with 2s debounce and case-insensitive suggestions</li>
   <li>[Global] Navbar is now sticky — stays fixed at top of page on scroll</li>
   <li>[Global] Duplicate Oracle Commerce brand element removed from page header</li>
 </ul>
