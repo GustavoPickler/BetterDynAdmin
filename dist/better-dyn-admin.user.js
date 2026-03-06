@@ -5,12 +5,12 @@
 // @author       Gustavo Pickler
 // @description  Refreshing ATG Dyn Admin
 // @license      GPL-3.0
-// @homepage     https://github.com/jc7447/BetterDynAdmin
+// @homepage     https://github.com/GustavoPickler/BetterDynAdmin
 // @homepageURL  https://github.com/jc7447/BetterDynAdmin#readme
 // @source       https://github.com/jc7447/BetterDynAdmin.git
-// @supportURL   https://github.com/jc7447/BetterDynAdmin/issues
-// @downloadURL  https://raw.githubusercontent.com/jc7447/BetterDynAdmin/master/dist/bda.user.js
-// @updateURL    https://raw.githubusercontent.com/jc7447/BetterDynAdmin/master/dist/bda.user.js
+// @supportURL   https://github.com/GustavoPickler/BetterDynAdmin/issues
+// @downloadURL  https://raw.githubusercontent.com/GustavoPickler/BetterDynAdmin/master/dist/better-dyn-admin.user.js
+// @updateURL    https://raw.githubusercontent.com/GustavoPickler/BetterDynAdmin/master/dist/better-dyn-admin.user.js
 // @include      */dyn/admin/*
 // @match        */dyn/admin/*
 // @require      https://code.jquery.com/jquery-3.7.1.min.js
@@ -31,11 +31,11 @@
 // @resource     cmHint          https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.css
 // @resource     fontAwesomeCSS  https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css
 // @resource     hlCSS           https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css
-// @resource     hljsThemeCSS    https://raw.githubusercontent.com/jc7447/BetterDynAdmin/master/lib/highlight.js/github_custom.css
+// @resource     hljsThemeCSS    https://raw.githubusercontent.com/GustavoPickler/BetterDynAdmin/master/lib/highlight.js/github_custom.css
 // @resource     select2CSS      https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css
 // @resource     tablesorterCSS  https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.31.3/css/theme.blue.min.css
 // @resource     visCSS          https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css
-// @resource     whatsnew        https://raw.githubusercontent.com/jc7447/BetterDynAdmin/master/WHATSNEW.md
+// @resource     whatsnew        https://raw.githubusercontent.com/GustavoPickler/BetterDynAdmin/master/WHATSNEW.md
 // @grant        GM_addStyle
 // @grant        GM_deleteValue
 // @grant        GM_getResourceText
@@ -433,7 +433,11 @@
             closeOnBackdrop: false,
             buttons: options.options.map((opt) => ({
               label: opt.label,
-              callback: opt._callback
+              callback: () => {
+                var _a;
+                (_a = opt._callback) == null ? void 0 : _a.call(opt);
+                modal.hide();
+              }
             }))
           });
           modal.show();
@@ -1368,7 +1372,8 @@
     }
     toggleRawXml() {
       $("#rawXml").toggle();
-      $("#rawXmlLink").html($("#rawXml").css("display") === "none" ? "show raw XML" : "hide raw XML");
+      const visible = $("#rawXml").is(":visible");
+      $("#rawXmlLink").html(visible ? "<i class='fa fa-code'></i> Hide raw XML" : "<i class='fa fa-code'></i> Show raw XML");
     }
     // -------------------------------------------------------------------------
     // Descriptor helpers
@@ -1578,9 +1583,13 @@ ${propName}=""
     // -------------------------------------------------------------------------
     addToQueryEditor(query) {
       if (!this.editor) return;
-      const cur = this.editor.getCursor();
-      if (cur.ch !== 0) this.editor.setCursor(cur.line + 1, 0);
-      this.editor.replaceSelection(query);
+      const current = this.editor.getDoc().getValue().trimEnd();
+      const newValue = current ? `${current}
+
+${query}` : query;
+      this.editor.getDoc().setValue(newValue);
+      const lines = newValue.split("\n");
+      this.editor.setCursor(lines.length - 1, 0);
     }
     setQueryEditorValue(value) {
       var _a;
@@ -1706,33 +1715,74 @@ ALL ORDER BY ID DESC RANGE 0+10
     // -------------------------------------------------------------------------
     showRQLResults() {
       logTrace("Start showRQLResults");
-      $("#RQLResults").append("<p><a href='javascript:void(0)' id='rawXmlLink'>Show raw xml</a></p>\n<p id='rawXml'></p>");
-      let xmlContent = $(this.resultsSelector).next().text().trim();
+      const $atgResult = $(this.resultsSelector).next();
+      $atgResult.hide();
+      let xmlContent = $atgResult.text().trim();
       xmlContent = sanitizeXml(xmlContent);
       processRepositoryXmlDef("definitionFiles", ($xmlDef) => {
         const log = this.showXMLAsTab(xmlContent, $xmlDef, $("#RQLResults"), false);
         this.showRQLLog(log, false);
-        $(this.resultsSelector).next().appendTo("#rawXml");
+        const rawText = $atgResult.text();
+        this.buildRawXmlViewer(rawText);
+        $atgResult.remove();
         $(this.resultsSelector).remove();
         $("#rawXmlLink").on("click", () => {
-          var _a;
           this.toggleRawXml();
-          const xmlSize = ((_a = $("#rawXml pre").html()) == null ? void 0 : _a.length) ?? 0;
-          if (xmlSize < this.xmlDefinitionMaxSize) {
-            if (typeof hljs !== "undefined") $("#rawXml").each((_, block) => hljs.highlightBlock(block));
-          } else if ($("#xmlHighlight").length === 0) {
-            $("<p id='xmlHighlight' />").html('The XML result is big. XML highlight disabled. <br><button id="xmlHighlightBtn">Highlight XML now</button>').prependTo("#rawXml");
-            $("#xmlHighlightBtn").on("click", () => {
-              if (typeof hljs !== "undefined") $("#rawXml pre").each((_, block) => hljs.highlightBlock(block));
-            });
-          }
-        });
-        $(".copyLink").on("click", function() {
-          const id = ($(this).attr("id") ?? "").replace("link_", "").replace(/(:|\.|\[|\]|,)/g, "\\$1");
-          $(`#${id}`).toggle();
-          $(`#text_${id}`).toggle();
         });
       });
+    }
+    buildRawXmlViewer(rawText) {
+      const items = [];
+      const parts = rawText.split(/------\s*Printing item with id:\s*/);
+      parts.forEach((part) => {
+        const trimmed = part.trim();
+        if (!trimmed) return;
+        const firstLine = trimmed.split("\n")[0].trim();
+        const restContent = trimmed.substring(firstLine.length).trim();
+        const descMatch = restContent.match(/item-descriptor="([^"]+)"/);
+        const descriptor = descMatch ? descMatch[1] : "unknown";
+        const id = firstLine || "unknown";
+        items.push({ id, descriptor, content: restContent || trimmed });
+      });
+      const $rawXml = $('<div id="rawXml"></div>');
+      const $toolbar = $('<div class="bda-rawxml-toolbar"></div>');
+      $toolbar.append(
+        `<span class="bda-rawxml-toolbar__title"><i class="fa fa-code"></i> Raw XML <span class="bda-desc-card__count">${items.length} item(s)</span></span>`
+      );
+      $toolbar.append(
+        '<div class="bda-rawxml-search"><i class="fa fa-search"></i><input type="text" class="bda-input" placeholder="Search by ID..." /></div>'
+      );
+      $rawXml.append($toolbar);
+      const $body = $('<div class="bda-rawxml-body"></div>');
+      if (items.length === 0) {
+        $body.append($('<div class="bda-rawxml-item__content"></div>').text(rawText));
+      } else {
+        items.forEach((item, i) => {
+          const $item = $(`<div class="bda-rawxml-item" data-item-id="${item.id}"></div>`);
+          const $header = $(`<div class="bda-rawxml-item__header">
+          <i class="fa fa-chevron-right"></i>
+          <span class="bda-rawxml-item__desc">${item.descriptor}</span>
+          <span style="color:var(--bda-slate-400)">&bull;</span>
+          <span class="bda-rawxml-item__id">${item.id}</span>
+        </div>`);
+          const $content = $('<div class="bda-rawxml-item__content"></div>').text(item.content).hide();
+          $header.on("click", function() {
+            $content.toggle();
+            $(this).find("i").toggleClass("fa-chevron-right fa-chevron-down");
+          });
+          $item.append($header).append($content);
+          $body.append($item);
+        });
+      }
+      $rawXml.append($body);
+      $toolbar.find("input").on("input", function() {
+        const term = $(this).val().toLowerCase();
+        $body.find(".bda-rawxml-item").each(function() {
+          const id = ($(this).attr("data-item-id") ?? "").toLowerCase();
+          $(this).toggle(!term || id.includes(term));
+        });
+      });
+      $("#RQLResults .bda-desc-grid").before($rawXml);
     }
     showRqlErrors() {
       let error = "";
@@ -1758,6 +1808,10 @@ ALL ORDER BY ID DESC RANGE 0+10
     // -------------------------------------------------------------------------
     // XML Tab rendering
     // -------------------------------------------------------------------------
+    formatPropertyName(name) {
+      const lower = /^[A-Z_]+$/.test(name) ? name.toLowerCase() : name;
+      return lower.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").split(/[\s_]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+    }
     escapeHTML(s) {
       return String(s).replace(/&(?!\w+;)/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
@@ -1807,47 +1861,69 @@ ALL ORDER BY ID DESC RANGE 0+10
       }
       return result;
     }
-    renderProperty(curProp, propValue, itemId, isItemTree) {
-      const td = `<td data-property='${curProp.name}' data-item-id='${itemId ?? ""}'>`;
+    renderTab(itemDesc, types, datas, tabId, isItemTree) {
+      const descName = itemDesc.substring(1);
+      let html = "";
+      datas.forEach((d, di) => {
+        const itemId = d["id"] ?? "";
+        const cardId = `bda-desc-${descName}-${itemId}-${di}`;
+        html += `<div class="bda-desc-card" id="${cardId}" data-descriptor="${descName}" data-item-id="${itemId}">`;
+        html += '<div class="bda-desc-card__header">';
+        html += '<div class="bda-desc-card__info">';
+        html += `<i class="fa fa-database" style="color:var(--bda-slate-500);font-size:13px"></i>`;
+        html += `<span class="bda-desc-card__descriptor">${descName}</span>`;
+        html += `<span style="color:var(--bda-slate-400)">&bull;</span>`;
+        html += `<span class="bda-desc-card__id">${itemId}</span>`;
+        html += "</div>";
+        html += '<div class="bda-desc-card__btns">';
+        html += `<button class="bda-desc-card__btn bda-desc-card__btn--minimize" title="Minimize"><i class="fa fa-minus"></i></button>`;
+        html += `<button class="bda-desc-card__btn bda-desc-card__btn--close" title="Close"><i class="fa fa-times"></i></button>`;
+        html += "</div>";
+        html += "</div>";
+        html += '<div class="bda-desc-card__body">';
+        html += '<div class="bda-desc-card__search"><i class="fa fa-search"></i><input type="text" class="bda-input bda-desc-card__search-input" placeholder="Search properties..." /></div>';
+        html += `<table class="dataTable" data-descriptor="${descName}"${isItemTree ? ` id="${tabId}_${di}"` : ""}>`;
+        types.forEach((curProp) => {
+          html += "<tr>";
+          html += '<td><div class="bda-desc-card__prop-label">';
+          html += `<span class="bda-desc-card__prop-name">${this.formatPropertyName(curProp.name)}`;
+          if (curProp.rdonly === "true") html += " <span class='bda-badge bda-badge--danger'>R</span>";
+          if (curProp.derived === "true") html += " <span class='bda-badge bda-badge--success'>D</span>";
+          if (curProp.exportable === "true") html += " <span class='bda-badge bda-badge--accent'>E</span>";
+          html += "</span>";
+          html += `<span class="bda-desc-card__prop-key">${curProp.name}</span>`;
+          html += "</div></td>";
+          html += `<td class="bda-desc-card__prop-value" data-property="${curProp.name}" data-item-id="${itemId}">${this.renderPropertyValue(curProp, d[curProp.name], itemId, isItemTree)}</td>`;
+          html += "</tr>";
+        });
+        html += "</table></div>";
+        html += "</div>";
+      });
+      return html;
+    }
+    renderPropertyValue(curProp, propValue, itemId, isItemTree) {
       if (propValue === null || propValue === void 0) {
-        return `${td}<i class='fa fa-pencil-square-o' aria-hidden='true'></i></td>`;
+        return "<i class='fa fa-pencil-square-o' aria-hidden='true'></i>";
       }
       propValue = propValue.replace(/ /g, "●");
       if (curProp.name === "descriptor") propValue = propValue.substring(1);
       const baseId = `${curProp.name}_${itemId}`;
-      if (curProp.name === "id") return `<td id='${baseId}'>${propValue}</td>`;
-      if (propValue.length > 25) {
-        return `${td}<a class='copyLink' href='javascript:void(0)' title='Show all' id='link_${baseId}'><span id='${baseId}'>${this.escapeHTML(propValue.substring(0, 25))}...</span></a><textarea class='copyField' id='text_${baseId}' readonly>${propValue}</textarea></td>`;
+      if (curProp.name === "id") return `<span id='${baseId}'>${propValue}</span>`;
+      if (propValue.length > 50) {
+        return `<a class='copyLink' href='javascript:void(0)' title='Show all' id='link_${baseId}'><span id='${baseId}'>${this.escapeHTML(propValue.substring(0, 50))}...</span></a><textarea class='copyField' id='text_${baseId}' readonly>${propValue}</textarea>`;
       }
       if (curProp.isId === true) {
         const parts = this.parseRepositoryId(propValue);
-        let html = td;
+        let html = "";
         parts.forEach((p) => {
           if (p !== MAP_SEPARATOR && p !== LIST_SEPARATOR) {
             html += isItemTree ? `<a class='clickable_property' href='#id_${p}'>${p}</a>` : `<a class='clickable_property loadable_property' data-id='${p}' data-descriptor='${curProp.itemDesc ?? ""}'>${p}</a>`;
           } else html += p;
         });
-        return html + "</td>";
+        return html;
       }
-      if (curProp.name === "descriptor" || curProp.rdonly === "true" || curProp.derived === "true") return `<td>${propValue}</td>`;
-      return `${td}<i class='fa fa-pencil-square-o' aria-hidden='true'></i>${propValue}</td>`;
-    }
-    renderTab(itemDesc, types, datas, tabId, isItemTree) {
-      let html = `<table class='dataTable' data-descriptor='${itemDesc.substring(1)}'${isItemTree ? ` id='${tabId}'` : ""}>`;
-      types.forEach((curProp, i) => {
-        let extra = curProp.name === "id" ? " id" : curProp.name === "descriptor" ? " descriptor" : "";
-        html += `<tr class='${i % 2 === 0 ? "even" : "odd"}${extra}'>`;
-        html += `<th>${curProp.name}<span class='prop_name'>`;
-        if (curProp.rdonly === "true") html += "<span class='bda-badge bda-badge--danger'>R</span>";
-        if (curProp.derived === "true") html += "<span class='bda-badge bda-badge--success'>D</span>";
-        if (curProp.exportable === "true") html += "<span class='bda-badge bda-badge--accent'>E</span>";
-        html += "</span></th>";
-        datas.forEach((d) => {
-          html += this.renderProperty(curProp, d[curProp.name], d["id"], isItemTree);
-        });
-        html += "</tr>";
-      });
-      return html + "</table>";
+      if (curProp.name === "descriptor" || curProp.rdonly === "true" || curProp.derived === "true") return propValue;
+      return `<i class='fa fa-pencil-square-o' aria-hidden='true'></i>${propValue}`;
     }
     showXMLAsTab(xmlContent, $xmlDef, $outputDiv, isItemTree) {
       console.time("renderTab");
@@ -1898,54 +1974,101 @@ ALL ORDER BY ID DESC RANGE 0+10
         curData["id"] = $item.attr("id");
         datas[curItemDesc].push(curData);
       });
-      let html = `<p class='nbResults'>${$addItems.length} items in ${nbTypes} descriptor(s)</p>`;
+      const $legend = $(
+        '<div class="bda-desc-legend"><div class="bda-desc-legend__item"><span class="bda-badge bda-badge--danger">R</span> read-only</div><div class="bda-desc-legend__item"><span class="bda-badge bda-badge--success">D</span> derived</div><div class="bda-desc-legend__item"><span class="bda-badge bda-badge--accent">E</span> export is false</div><div class="bda-desc-legend__actions"></div></div>'
+      );
+      $outputDiv.append($legend);
+      let cardsHtml = "";
       const splitObj = this.getStoredSplitObj();
       let splitValue = (splitObj == null ? void 0 : splitObj.activeSplit) === false ? parseInt(splitObj.splitValue) : 0;
       for (const itemDesc in datas) {
         if (splitValue === 0) splitValue = datas[itemDesc].length;
         let nbTab = 0;
         if (datas[itemDesc].length <= splitValue) {
-          html += this.renderTab(itemDesc, types[itemDesc], datas[itemDesc], itemDesc.substring(1), isItemTree);
+          cardsHtml += this.renderTab(itemDesc, types[itemDesc], datas[itemDesc], itemDesc.substring(1), isItemTree);
         } else {
           while (splitValue * nbTab < datas[itemDesc].length) {
             const start = splitValue * nbTab;
-            html += this.renderTab(itemDesc, types[itemDesc], datas[itemDesc].slice(start, Math.min(start + splitValue, datas[itemDesc].length)), `${itemDesc}_${nbTab}`, isItemTree);
+            cardsHtml += this.renderTab(itemDesc, types[itemDesc], datas[itemDesc].slice(start, Math.min(start + splitValue, datas[itemDesc].length)), `${itemDesc}_${nbTab}`, isItemTree);
             nbTab++;
           }
         }
       }
-      $outputDiv.append(html);
-      $outputDiv.prepend(
-        "<span class='bda-badge bda-badge--danger'>R</span> : read-only <span class='bda-badge bda-badge--success'>D</span> : derived <span class='bda-badge bda-badge--accent'>E</span> : export is false"
-      );
-      if ($(".copyField").length > 0) {
-        $outputDiv.find("p.nbResults").append("<br><a href='javascript:void(0)' class='showFullTextLink'>Show full text</a>");
+      const $grid = $(`<div class="bda-desc-grid">${cardsHtml}</div>`);
+      $outputDiv.append($grid);
+      const $counter = $(`<span class="bda-desc-card__count">${$addItems.length} items in ${nbTypes} descriptor(s)</span>`);
+      $legend.find(".bda-desc-legend__actions").prepend($counter);
+      $legend.find(".bda-desc-legend__actions").append("<a href='javascript:void(0)' id='rawXmlLink'><i class='fa fa-code'></i> Show raw XML</a>");
+      if ($grid.find(".copyField").length > 0) {
+        $legend.find(".bda-desc-legend__actions").append("<a href='javascript:void(0)' class='showFullTextLink'><i class='fa fa-expand'></i> Show full text</a>");
+        let fullTextShown = false;
+        const savedHtml = /* @__PURE__ */ new Map();
         $outputDiv.find(".showFullTextLink").on("click", function() {
-          $(".copyField").each((_, el) => $(el).parent().html($(el).html()));
-          $(this).hide();
+          fullTextShown = !fullTextShown;
+          if (fullTextShown) {
+            $grid.find(".copyField").each((_, el) => {
+              const $parent = $(el).parent();
+              savedHtml.set($parent[0], $parent.html());
+              $parent.html($(el).html());
+            });
+          } else {
+            savedHtml.forEach((html, el) => $(el).html(html));
+          }
+          $(this).html(fullTextShown ? "<i class='fa fa-compress'></i> Hide full text" : "<i class='fa fa-expand'></i> Show full text");
         });
       }
-      $(".loadable_property").on("click", (e) => {
-        var _a, _b;
+      $grid.on("input", ".bda-desc-card__search-input", function() {
+        const term = $(this).val().toLowerCase();
+        const $table = $(this).closest(".bda-desc-card__body").find("table");
+        $table.find("tr").each(function() {
+          const $row = $(this);
+          const propName = $row.find(".bda-desc-card__prop-name").text().toLowerCase();
+          const propKey = $row.find(".bda-desc-card__prop-key").text().toLowerCase();
+          $row.toggle(!term || propName.includes(term) || propKey.includes(term));
+        });
+      });
+      $grid.on("click", ".bda-desc-card__btn--minimize", function() {
+        const $card = $(this).closest(".bda-desc-card");
+        const $body = $card.find(".bda-desc-card__body");
+        $body.toggle();
+        const isMinimized = !$body.is(":visible");
+        $(this).find("i").toggleClass("fa-minus", !isMinimized).toggleClass("fa-plus", isMinimized);
+        $(this).attr("title", isMinimized ? "Expand" : "Minimize");
+      });
+      $grid.on("click", ".bda-desc-card__btn--close", function() {
+        $(this).closest(".bda-desc-card").remove();
+      });
+      $grid.on("click", ".loadable_property", (e) => {
+        e.stopPropagation();
+        $("#bda-prop-popover").remove();
         const $elm = $(e.currentTarget);
         const id = $elm.attr("data-id") ?? "";
         const desc = $elm.attr("data-descriptor") ?? "";
         const query = `<print-item id='${id}' item-descriptor='${desc}' />
 `;
-        (_b = (_a = $("body")).bdaAlert) == null ? void 0 : _b.call(_a, {
-          msg: `You are about to add this query and reload the page: 
-${query}`,
-          options: [
-            { label: "Add & Reload", _callback: () => {
-              this.setQueryEditorValue(this.getQueryEditorValue() + query);
-              $("#RQLForm").trigger("submit");
-            } },
-            { label: "Just Add", _callback: () => {
-              this.setQueryEditorValue(this.getQueryEditorValue() + query);
-            } },
-            { label: "Cancel" }
-          ]
+        const $pop = $(
+          `<div id="bda-prop-popover" class="bda-prop-popover"><button class="bda-btn bda-btn--sm bda-btn--secondary" data-action="add">Add</button><button class="bda-btn bda-btn--sm bda-btn--primary" data-action="apply">Add &amp; Apply</button></div>`
+        );
+        const offset = $elm.offset() ?? { top: 0, left: 0 };
+        $pop.css({ top: offset.top + ($elm.outerHeight() ?? 20) + 4, left: offset.left });
+        $("body").append($pop);
+        $pop.find('[data-action="add"]').on("click", (ev) => {
+          ev.stopPropagation();
+          this.addToQueryEditor(query);
+          $pop.remove();
         });
+        $pop.find('[data-action="apply"]').on("click", (ev) => {
+          ev.stopPropagation();
+          this.addToQueryEditor(query);
+          $("#RQLForm").trigger("submit");
+          $pop.remove();
+        });
+        $(document).one("click.propPopover", () => $pop.remove());
+      });
+      $grid.on("click", ".copyLink", function() {
+        const id = ($(this).attr("id") ?? "").replace("link_", "").replace(/(:|\.|\[|\]|,)/g, "\\$1");
+        $(`#${id}`).toggle();
+        $(`#text_${id}`).toggle();
       });
       if (isItemTree) this.createSpeedbar();
       console.timeEnd("renderTab");
@@ -3615,6 +3738,93 @@ ${itemId}`, color: colorToCss(stringToColour(itemDesc)), shape: "box" });
       logTrace("Scheduler timeline rendered");
     }
   }
+  class BdaComponentSearch {
+    isApplicable() {
+      return document.location.href.includes("cmpn-search.jhtml");
+    }
+    init() {
+      if (!this.isApplicable()) return;
+      logTrace("BdaComponentSearch init");
+      this.build();
+    }
+    build() {
+      const query = $('input[name="query"]').val() ?? "";
+      const scope = $('input[name="scope"]:checked').val();
+      const results = this.collectResults();
+      const hasResults = results.length > 0;
+      $("body").children().not("#bdaNavbar, .bda-toolbar-strip, .bda-main, script, link, style, noscript").remove();
+      const $card = $(
+        '<div class="bda-card bda-cmpn-search-card"></div>'
+      );
+      $card.append(
+        '<div class="bda-section-header"><div class="bda-cmpn-search-header-content"><i class="fa fa-search" style="font-size:18px;color:var(--bda-slate-500)"></i><div><h3 class="bda-section-header__title" style="margin:0">Component Search</h3><p class="bda-cmpn-search-subtitle">Search for nucleus components or name contexts by partial name (case sensitive) or class (begin query with "class:")</p></div></div></div>'
+      );
+      const $form = $(`<form class="bda-cmpn-search-form" method="GET" action="${document.location.pathname}"></form>`);
+      const $formRow = $('<div class="bda-cmpn-search-form-row"></div>');
+      $formRow.append(
+        `<div class="bda-input-field bda-cmpn-search-query"><label class="bda-input-field__label">Query</label><input type="text" name="query" class="bda-input" placeholder="Enter component name or class:..." value="${this.escapeAttr(query)}" autofocus /></div>`
+      );
+      const runningChecked = !scope || scope === "running" ? "checked" : "";
+      const allChecked = scope === "all" ? "checked" : "";
+      $formRow.append(
+        `<div class="bda-input-field bda-cmpn-search-scope"><label class="bda-input-field__label">Search Scope</label><div class="bda-cmpn-search-radios"><label class="bda-cmpn-search-radio"><input type="radio" name="scope" value="running" ${runningChecked} /><span>Running</span></label><label class="bda-cmpn-search-radio"><input type="radio" name="scope" value="all" ${allChecked} /><span>All (Slow)*</span></label></div></div>`
+      );
+      $formRow.append(
+        '<div class="bda-cmpn-search-submit"><button type="submit" class="bda-btn bda-btn--primary"><i class="fa fa-search"></i> Search</button></div>'
+      );
+      $form.append($formRow);
+      $form.append(
+        '<p class="bda-cmpn-search-warning"><i class="fa fa-exclamation-triangle"></i> *Searching all components is resource intensive and not recommended for live production instances.</p>'
+      );
+      $card.append($form);
+      if (hasResults) {
+        const $resultsSection = $('<div class="bda-cmpn-search-results"></div>');
+        $resultsSection.append(
+          `<div class="bda-cmpn-search-results-header"><span class="bda-cmpn-search-results-title"><i class="fa fa-list"></i> Search Results</span><span class="bda-cmpn-search-results-count">${results.length} component${results.length !== 1 ? "s" : ""} found</span></div>`
+        );
+        const $list = $('<div class="bda-cmpn-search-list"></div>');
+        results.forEach((r) => {
+          const $item = $(
+            `<a class="bda-cmpn-search-item" href="/dyn/admin/nucleus${r.path}"><div class="bda-cmpn-search-item__icon"><i class="fa fa-cube"></i></div><div class="bda-cmpn-search-item__content"><span class="bda-cmpn-search-item__path">${this.escapeHtml(r.path)}</span>` + (r.description ? `<span class="bda-cmpn-search-item__desc">${this.escapeHtml(r.description)}</span>` : "") + '</div><i class="fa fa-chevron-right bda-cmpn-search-item__chevron"></i></a>'
+          );
+          $list.append($item);
+        });
+        $resultsSection.append($list);
+        $card.append($resultsSection);
+      } else if (query) {
+        $card.append(
+          `<div class="bda-cmpn-search-empty"><i class="fa fa-search"></i><p>No components found for "<strong>${this.escapeHtml(query)}</strong>"</p><p class="bda-cmpn-search-empty__hint">Try a different search term</p></div>`
+        );
+      }
+      if ($(".bda-main").length > 0) {
+        $(".bda-main").prepend($card);
+      } else {
+        $("body").append($card);
+      }
+    }
+    collectResults() {
+      const results = [];
+      $("th:contains('Search Results:')").closest("table").find("td").each(function() {
+        const $td = $(this);
+        const $a = $td.find("a").first();
+        if ($a.length === 0) return;
+        const href = $a.attr("href") ?? "";
+        const path = href.replace("/dyn/admin/nucleus", "");
+        if (!path) return;
+        const desc = $td.contents().filter(function() {
+          return this.nodeType === 3;
+        }).text().trim().replace(/^[,\s]+/, "");
+        results.push({ path, description: desc });
+      });
+      return results;
+    }
+    escapeHtml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+    escapeAttr(s) {
+      return String(s).replace(/"/g, "&quot;");
+    }
+  }
   const bdaCss = `/* =============================================================================\r
    BDA Design Tokens — Oracle Commerce Redesign\r
    ============================================================================= */\r
@@ -4829,7 +5039,7 @@ body > form:empty {\r
 \r
 #RQLResults {\r
   margin: 0;\r
-  padding: 24px;\r
+  padding: 0;\r
   overflow-x: auto;\r
 }\r
 \r
@@ -4888,8 +5098,109 @@ body > form:empty {\r
 \r
 #rawXml {\r
   display: none;\r
-  margin: 0;\r
-  padding: 0;\r
+  margin: 0 0 16px;\r
+  background: var(--bda-white);\r
+  border: 1px solid var(--bda-slate-200);\r
+  border-radius: var(--bda-radius-lg);\r
+  overflow: hidden;\r
+}\r
+\r
+.bda-rawxml-toolbar {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 12px;\r
+  padding: 10px 16px;\r
+  background: var(--bda-slate-50);\r
+  border-bottom: 1px solid var(--bda-slate-200);\r
+}\r
+\r
+.bda-rawxml-toolbar__title {\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-text-strong);\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+}\r
+\r
+.bda-rawxml-search {\r
+  position: relative;\r
+  max-width: 240px;\r
+  margin-left: auto;\r
+}\r
+\r
+.bda-rawxml-search > i {\r
+  position: absolute;\r
+  left: 10px;\r
+  top: 50%;\r
+  transform: translateY(-50%);\r
+  color: var(--bda-slate-400);\r
+  font-size: 12px;\r
+  pointer-events: none;\r
+}\r
+\r
+.bda-rawxml-search > input {\r
+  padding-left: 30px !important;\r
+  width: 100%;\r
+  font-size: var(--bda-font-size-xs);\r
+}\r
+\r
+.bda-rawxml-body {\r
+  max-height: 500px;\r
+  overflow: auto;\r
+}\r
+\r
+.bda-rawxml-item {\r
+  border-bottom: 1px solid var(--bda-slate-100);\r
+}\r
+\r
+.bda-rawxml-item:last-child {\r
+  border-bottom: none;\r
+}\r
+\r
+.bda-rawxml-item__header {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+  padding: 8px 16px;\r
+  background: var(--bda-slate-50);\r
+  border-bottom: 1px solid var(--bda-slate-100);\r
+  cursor: pointer;\r
+  user-select: none;\r
+}\r
+\r
+.bda-rawxml-item__header:hover {\r
+  background: var(--bda-slate-100);\r
+}\r
+\r
+.bda-rawxml-item__header i.fa-chevron-right,\r
+.bda-rawxml-item__header i.fa-chevron-down {\r
+  font-size: 10px;\r
+  color: var(--bda-slate-400);\r
+  width: 12px;\r
+}\r
+\r
+.bda-rawxml-item__desc {\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-slate-700);\r
+}\r
+\r
+.bda-rawxml-item__id {\r
+  font-family: var(--bda-font-mono);\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-accent);\r
+}\r
+\r
+.bda-rawxml-item__content {\r
+  padding: 12px 16px;\r
+  font-family: var(--bda-font-mono);\r
+  font-size: var(--bda-font-size-xs);\r
+  line-height: 1.6;\r
+  color: var(--bda-slate-700);\r
+  word-break: break-all;\r
+  white-space: pre-wrap;\r
+  background: var(--bda-white);\r
 }\r
 \r
 /* =============================================================================\r
@@ -4928,6 +5239,292 @@ body > form:empty {\r
   border-bottom: 1px solid var(--bda-slate-200);\r
   text-transform: uppercase;\r
   letter-spacing: 0.05em;\r
+}\r
+\r
+/* =============================================================================\r
+   Descriptor Cards — item result grid\r
+   ============================================================================= */\r
+.bda-desc-legend {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 16px;\r
+  margin-bottom: 12px;\r
+  padding: 0 2px;\r
+  flex-wrap: wrap;\r
+}\r
+\r
+.bda-desc-legend__item {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 6px;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-slate-600);\r
+}\r
+\r
+.bda-desc-legend__actions {\r
+  margin-left: auto;\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+}\r
+\r
+.bda-desc-legend__actions a {\r
+  display: inline-flex;\r
+  align-items: center;\r
+  gap: 4px;\r
+  padding: 4px 12px;\r
+  font-size: var(--bda-font-size-xs);\r
+  font-weight: 500;\r
+  color: var(--bda-slate-600);\r
+  background: var(--bda-white);\r
+  border: 1px solid var(--bda-slate-200);\r
+  border-radius: var(--bda-radius);\r
+  text-decoration: none;\r
+  transition: background 0.15s, border-color 0.15s, color 0.15s;\r
+  cursor: pointer;\r
+  white-space: nowrap;\r
+}\r
+\r
+.bda-desc-legend__actions a:hover {\r
+  background: var(--bda-slate-50);\r
+  border-color: var(--bda-slate-300);\r
+  color: var(--bda-text-strong);\r
+}\r
+\r
+.bda-desc-grid {\r
+  display: grid;\r
+  grid-template-columns: 1fr;\r
+  gap: 16px;\r
+  align-items: start;\r
+}\r
+\r
+@media (min-width: 1280px) {\r
+  .bda-desc-grid {\r
+    grid-template-columns: repeat(2, 1fr);\r
+  }\r
+}\r
+\r
+.bda-desc-card {\r
+  background: var(--bda-white);\r
+  border-radius: var(--bda-radius-lg);\r
+  border: 1px solid var(--bda-slate-200);\r
+  box-shadow: var(--bda-shadow-card);\r
+  overflow: hidden;\r
+  display: flex;\r
+  flex-direction: column;\r
+}\r
+\r
+.bda-desc-card__header {\r
+  display: flex;\r
+  align-items: center;\r
+  justify-content: space-between;\r
+  padding: 10px 16px;\r
+  background: var(--bda-slate-50);\r
+  border-bottom: 1px solid var(--bda-slate-200);\r
+  gap: 8px;\r
+  min-height: 44px;\r
+}\r
+\r
+.bda-desc-card__info {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+  min-width: 0;\r
+  overflow: hidden;\r
+}\r
+\r
+.bda-desc-card__descriptor {\r
+  font-weight: 600;\r
+  color: var(--bda-text-strong);\r
+  font-size: var(--bda-font-size-sm);\r
+}\r
+\r
+.bda-desc-card__id {\r
+  font-family: var(--bda-font-mono);\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-slate-600);\r
+}\r
+\r
+.bda-desc-card__count {\r
+  font-size: var(--bda-font-size-xs);\r
+  padding: 2px 8px;\r
+  background: var(--bda-slate-200);\r
+  color: var(--bda-slate-600);\r
+  border-radius: var(--bda-radius);\r
+  white-space: nowrap;\r
+}\r
+\r
+.bda-desc-card__btns {\r
+  display: flex;\r
+  gap: 2px;\r
+  flex-shrink: 0;\r
+}\r
+\r
+.bda-desc-card__btn {\r
+  display: flex;\r
+  align-items: center;\r
+  justify-content: center;\r
+  width: 28px;\r
+  height: 28px;\r
+  border: none;\r
+  background: none;\r
+  border-radius: var(--bda-radius);\r
+  cursor: pointer;\r
+  color: var(--bda-slate-500);\r
+  transition: background 0.15s, color 0.15s;\r
+}\r
+\r
+.bda-desc-card__btn:hover {\r
+  background: var(--bda-slate-200);\r
+}\r
+\r
+.bda-desc-card__btn--close:hover {\r
+  background: var(--bda-danger-bg);\r
+  color: var(--bda-danger);\r
+}\r
+\r
+.bda-desc-card__actions {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 10px;\r
+  padding: 6px 16px;\r
+  border-bottom: 1px solid var(--bda-slate-100);\r
+  font-size: var(--bda-font-size-sm);\r
+}\r
+\r
+.bda-desc-card__actions a {\r
+  color: var(--bda-accent);\r
+  font-weight: 500;\r
+}\r
+\r
+.bda-desc-card__actions a:hover {\r
+  color: var(--bda-accent-hover);\r
+}\r
+\r
+.bda-desc-card__actions .bda-sep {\r
+  color: var(--bda-slate-300);\r
+}\r
+\r
+.bda-desc-card__body {\r
+  flex: 1;\r
+  max-height: 500px;\r
+  overflow-y: auto;\r
+}\r
+\r
+.bda-desc-card__search {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 8px;\r
+  padding: 8px 12px;\r
+  border-bottom: 1px solid var(--bda-slate-100);\r
+  background: var(--bda-slate-50);\r
+}\r
+\r
+.bda-desc-card__search > i {\r
+  color: var(--bda-slate-400);\r
+  font-size: 12px;\r
+  flex-shrink: 0;\r
+}\r
+\r
+.bda-desc-card__search > input {\r
+  flex: 1;\r
+  border: none;\r
+  background: transparent;\r
+  outline: none;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-slate-700);\r
+}\r
+\r
+.bda-desc-card__search > input::placeholder {\r
+  color: var(--bda-slate-400);\r
+}\r
+\r
+.bda-desc-card__body table {\r
+  width: 100%;\r
+  font-size: var(--bda-font-size-sm);\r
+  border-collapse: collapse;\r
+}\r
+\r
+.bda-desc-card__body tr {\r
+  transition: background 0.1s;\r
+}\r
+\r
+.bda-desc-card__body tr:hover {\r
+  background: rgba(59, 130, 246, 0.04);\r
+}\r
+\r
+.bda-desc-card__body tr:nth-child(even) {\r
+  background: rgba(248, 250, 252, 0.5);\r
+}\r
+\r
+.bda-desc-card__body tr:nth-child(even):hover {\r
+  background: rgba(59, 130, 246, 0.04);\r
+}\r
+\r
+.bda-desc-card__body td {\r
+  padding: 8px 16px;\r
+  vertical-align: top;\r
+}\r
+\r
+.bda-desc-card__body td:first-child {\r
+  width: 45%;\r
+}\r
+\r
+.bda-desc-card__prop-label {\r
+  display: flex;\r
+  flex-direction: column;\r
+  gap: 1px;\r
+}\r
+\r
+.bda-desc-card__prop-name {\r
+  font-weight: 500;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-slate-700);\r
+  display: inline-flex;\r
+  align-items: center;\r
+  gap: 6px;\r
+}\r
+\r
+.bda-desc-card__prop-key {\r
+  font-family: var(--bda-font-mono);\r
+  font-size: 10px;\r
+  color: var(--bda-slate-400);\r
+  letter-spacing: 0.02em;\r
+}\r
+\r
+.bda-desc-card__prop-value {\r
+  color: var(--bda-slate-700);\r
+  font-family: var(--bda-font-mono);\r
+  font-size: var(--bda-font-size-xs);\r
+  word-break: break-all;\r
+}\r
+\r
+.bda-desc-card__prop-value .fa-pencil-square-o {\r
+  color: var(--bda-slate-400);\r
+  margin-right: 4px;\r
+  cursor: pointer;\r
+}\r
+\r
+.bda-desc-card__prop-value a {\r
+  color: var(--bda-accent);\r
+}\r
+\r
+.bda-desc-card__prop-value a:hover {\r
+  color: var(--bda-accent-hover);\r
+  text-decoration: underline;\r
+}\r
+\r
+.bda-desc-empty {\r
+  text-align: center;\r
+  padding: 48px 16px;\r
+  color: var(--bda-slate-400);\r
+}\r
+\r
+.bda-desc-empty i {\r
+  font-size: 40px;\r
+  opacity: 0.3;\r
+  margin-bottom: 12px;\r
+  display: block;\r
 }\r
 \r
 /* =============================================================================\r
@@ -6932,6 +7529,230 @@ form input[type="submit"]:not(:first-of-type):hover {\r
 }\r
 \r
 /* =============================================================================\r
+   Component Search\r
+   ============================================================================= */\r
+.bda-cmpn-search-card {\r
+  max-width: 900px;\r
+}\r
+\r
+.bda-cmpn-search-header-content {\r
+  display: flex;\r
+  align-items: flex-start;\r
+  gap: 12px;\r
+}\r
+\r
+.bda-cmpn-search-subtitle {\r
+  margin: 4px 0 0;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-slate-500);\r
+  line-height: 1.5;\r
+}\r
+\r
+.bda-cmpn-search-form {\r
+  padding: 24px;\r
+}\r
+\r
+.bda-cmpn-search-form-row {\r
+  display: flex;\r
+  align-items: flex-end;\r
+  gap: 16px;\r
+  flex-wrap: wrap;\r
+}\r
+\r
+.bda-cmpn-search-query {\r
+  flex: 1;\r
+  min-width: 220px;\r
+}\r
+\r
+.bda-cmpn-search-scope .bda-input-field__label {\r
+  display: block;\r
+  margin-bottom: 6px;\r
+}\r
+\r
+.bda-cmpn-search-radios {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 16px;\r
+  height: 34px;\r
+}\r
+\r
+.bda-cmpn-search-radio {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 6px;\r
+  cursor: pointer;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-slate-700);\r
+}\r
+\r
+.bda-cmpn-search-radio input[type="radio"] {\r
+  width: 14px;\r
+  height: 14px;\r
+  accent-color: var(--bda-brand);\r
+  cursor: pointer;\r
+}\r
+\r
+.bda-cmpn-search-submit {\r
+  padding-bottom: 2px;\r
+}\r
+\r
+.bda-cmpn-search-warning {\r
+  margin: 12px 0 0;\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-warning);\r
+}\r
+\r
+.bda-cmpn-search-results {\r
+  border-top: 1px solid var(--bda-slate-100);\r
+}\r
+\r
+.bda-cmpn-search-results-header {\r
+  display: flex;\r
+  align-items: center;\r
+  justify-content: space-between;\r
+  padding: 10px 24px;\r
+  background: var(--bda-slate-50);\r
+}\r
+\r
+.bda-cmpn-search-results-title {\r
+  font-weight: 600;\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-slate-700);\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 6px;\r
+}\r
+\r
+.bda-cmpn-search-results-count {\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-slate-500);\r
+}\r
+\r
+.bda-cmpn-search-list {\r
+  max-height: 400px;\r
+  overflow-y: auto;\r
+}\r
+\r
+.bda-cmpn-search-item {\r
+  display: flex;\r
+  align-items: center;\r
+  gap: 12px;\r
+  padding: 10px 24px;\r
+  border-bottom: 1px solid var(--bda-slate-100);\r
+  text-decoration: none;\r
+  transition: background 0.12s;\r
+}\r
+\r
+.bda-cmpn-search-item:hover {\r
+  background: rgba(59, 130, 246, 0.04);\r
+}\r
+\r
+.bda-cmpn-search-item__icon {\r
+  width: 30px;\r
+  height: 30px;\r
+  border-radius: var(--bda-radius);\r
+  background: var(--bda-slate-100);\r
+  display: flex;\r
+  align-items: center;\r
+  justify-content: center;\r
+  flex-shrink: 0;\r
+  transition: background 0.12s;\r
+}\r
+\r
+.bda-cmpn-search-item:hover .bda-cmpn-search-item__icon {\r
+  background: var(--bda-info-bg);\r
+}\r
+\r
+.bda-cmpn-search-item__icon i {\r
+  font-size: 13px;\r
+  color: var(--bda-slate-500);\r
+  transition: color 0.12s;\r
+}\r
+\r
+.bda-cmpn-search-item:hover .bda-cmpn-search-item__icon i {\r
+  color: var(--bda-info);\r
+}\r
+\r
+.bda-cmpn-search-item__content {\r
+  flex: 1;\r
+  min-width: 0;\r
+  display: flex;\r
+  flex-direction: column;\r
+  gap: 2px;\r
+}\r
+\r
+.bda-cmpn-search-item__path {\r
+  font-family: var(--bda-font-mono);\r
+  font-size: var(--bda-font-size-sm);\r
+  color: var(--bda-brand);\r
+  overflow: hidden;\r
+  text-overflow: ellipsis;\r
+  white-space: nowrap;\r
+}\r
+\r
+.bda-cmpn-search-item:hover .bda-cmpn-search-item__path {\r
+  color: var(--bda-brand-dark);\r
+}\r
+\r
+.bda-cmpn-search-item__desc {\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-slate-500);\r
+  overflow: hidden;\r
+  text-overflow: ellipsis;\r
+  white-space: nowrap;\r
+}\r
+\r
+.bda-cmpn-search-item__chevron {\r
+  font-size: 11px;\r
+  color: var(--bda-slate-300);\r
+  flex-shrink: 0;\r
+  transition: color 0.12s;\r
+}\r
+\r
+.bda-cmpn-search-item:hover .bda-cmpn-search-item__chevron {\r
+  color: var(--bda-slate-500);\r
+}\r
+\r
+.bda-cmpn-search-empty {\r
+  padding: 48px 24px;\r
+  text-align: center;\r
+}\r
+\r
+.bda-cmpn-search-empty i {\r
+  font-size: 36px;\r
+  color: var(--bda-slate-300);\r
+  display: block;\r
+  margin-bottom: 12px;\r
+}\r
+\r
+.bda-cmpn-search-empty p {\r
+  color: var(--bda-slate-500);\r
+  margin: 0;\r
+}\r
+\r
+.bda-cmpn-search-empty__hint {\r
+  font-size: var(--bda-font-size-xs);\r
+  color: var(--bda-slate-400) !important;\r
+  margin-top: 4px !important;\r
+}\r
+\r
+/* =============================================================================\r
+   Property Popover\r
+   ============================================================================= */\r
+\r
+.bda-prop-popover {\r
+  position: absolute;\r
+  z-index: 9999;\r
+  display: flex;\r
+  gap: 6px;\r
+  background: var(--bda-surface);\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius);\r
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);\r
+  padding: 6px 8px;\r
+}\r
+\r
+/* =============================================================================\r
    Footer\r
    ============================================================================= */\r
 .bda-footer {\r
@@ -7259,6 +8080,7 @@ form input[type="submit"]:not(:first-of-type):hover {\r
     if (typeof $.tablesorter !== "undefined") {
       $.tablesorter.defaults.sortInitialOrder = "desc";
     }
+    new BdaComponentSearch().init();
     new BdaCompConfig().init();
     new BdaRepository().init();
     new BdaPipeline().init();

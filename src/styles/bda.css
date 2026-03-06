@@ -3910,6 +3910,22 @@ form input[type="submit"]:not(:first-of-type):hover {
 }
 
 /* =============================================================================
+   Property Popover
+   ============================================================================= */
+
+.bda-prop-popover {
+  position: absolute;
+  z-index: 9999;
+  display: flex;
+  gap: 6px;
+  background: var(--bda-surface);
+  border: 1px solid var(--bda-border);
+  border-radius: var(--bda-radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 6px 8px;
+}
+
+/* =============================================================================
    Footer
    ============================================================================= */
 .bda-footer {

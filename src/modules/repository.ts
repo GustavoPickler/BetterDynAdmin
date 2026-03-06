@@ -1192,20 +1192,41 @@ export class BdaRepository {
       $(this).closest('.bda-desc-card').remove();
     });
 
-    // Loadable property click
+    // Loadable property click — inline popover
     $grid.on('click', '.loadable_property', (e) => {
+      e.stopPropagation();
+      $('#bda-prop-popover').remove();
+
       const $elm = $(e.currentTarget);
       const id = $elm.attr('data-id') ?? '';
       const desc = $elm.attr('data-descriptor') ?? '';
       const query = `<print-item id='${id}' item-descriptor='${desc}' />\n`;
-      ($('body') as unknown as { bdaAlert?(opts: unknown): void }).bdaAlert?.({
-        msg: `You are about to add this query and reload the page: \n${query}`,
-        options: [
-          { label: 'Add & Reload', _callback: () => { this.setQueryEditorValue(this.getQueryEditorValue() + query); $('#RQLForm').trigger('submit'); } },
-          { label: 'Just Add', _callback: () => { this.setQueryEditorValue(this.getQueryEditorValue() + query); } },
-          { label: 'Cancel' },
-        ],
+
+      const $pop = $(
+        '<div id="bda-prop-popover" class="bda-prop-popover">' +
+        `<button class="bda-btn bda-btn--sm bda-btn--secondary" data-action="add">Add</button>` +
+        `<button class="bda-btn bda-btn--sm bda-btn--primary" data-action="apply">Add &amp; Apply</button>` +
+        '</div>',
+      );
+
+      const offset = $elm.offset() ?? { top: 0, left: 0 };
+      $pop.css({ top: offset.top + ($elm.outerHeight() ?? 20) + 4, left: offset.left });
+      $('body').append($pop);
+
+      $pop.find('[data-action="add"]').on('click', (ev) => {
+        ev.stopPropagation();
+        this.addToQueryEditor(query);
+        $pop.remove();
       });
+
+      $pop.find('[data-action="apply"]').on('click', (ev) => {
+        ev.stopPropagation();
+        this.addToQueryEditor(query);
+        $('#RQLForm').trigger('submit');
+        $pop.remove();
+      });
+
+      $(document).one('click.propPopover', () => $pop.remove());
     });
 
     // Copy link toggle
