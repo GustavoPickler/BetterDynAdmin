@@ -1529,7 +1529,7 @@
 ${propName}=""
 </query-items>
 `;
-          this.setQueryEditorValue(query);
+          this.addToQueryEditor(query);
         });
       });
     }

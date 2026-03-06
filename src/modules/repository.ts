@@ -617,7 +617,7 @@ export class BdaRepository {
       $('.propQueryBtn').on('click', (e) => {
         const propName = $(e.currentTarget).text().trim();
         const query = `<query-items item-descriptor="${item}" id-only="false">\n${propName}=""\n</query-items>\n`;
-        this.setQueryEditorValue(query);
+        this.addToQueryEditor(query);
       });
     });
   }
