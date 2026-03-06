@@ -6980,13 +6980,57 @@ ol.itemDescAttributes {\r
 /* =============================================================================\r
    Autocomplete / Search\r
    ============================================================================= */\r
-#searchField {\r
+#searchFieldBDA {\r
   width: 300px;\r
 }\r
 \r
+/* Typeahead dropdown */\r
+.bda-search-wrapper {\r
+  position: relative;\r
+  display: inline-block;\r
+}\r
+\r
+.bda-search-wrapper .twitter-typeahead {\r
+  display: block !important;\r
+}\r
+\r
+.bda-search-wrapper .tt-menu {\r
+  position: absolute;\r
+  top: calc(100% + 4px);\r
+  right: 0;\r
+  left: auto;\r
+  min-width: 420px;\r
+  max-height: 400px;\r
+  overflow-y: auto;\r
+  background: #fff;\r
+  border: 1px solid var(--bda-border);\r
+  border-radius: var(--bda-radius);\r
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);\r
+  z-index: 10000;\r
+}\r
+\r
+.bda-search-wrapper .tt-suggestion {\r
+  cursor: pointer;\r
+}\r
+\r
+.bda-search-wrapper .tt-suggestion:hover,\r
+.bda-search-wrapper .tt-suggestion.tt-cursor {\r
+  background: var(--bda-slate-50);\r
+}\r
+\r
 .bda-search-suggestion {\r
-  padding: 6px 12px;\r
+  padding: 7px 14px;\r
   font-size: var(--bda-font-size-sm);\r
+  font-family: var(--bda-font-mono);\r
+  color: var(--bda-brand);\r
+  white-space: nowrap;\r
+  overflow: hidden;\r
+  text-overflow: ellipsis;\r
+}\r
+\r
+.bda-search-suggestion .tt-highlight {\r
+  font-weight: 700;\r
+  color: var(--bda-slate-900);\r
 }\r
 \r
 /* =============================================================================\r

@@ -3084,13 +3084,57 @@ ol.itemDescAttributes {
 /* =============================================================================
    Autocomplete / Search
    ============================================================================= */
-#searchField {
+#searchFieldBDA {
   width: 300px;
 }
 
+/* Typeahead dropdown */
+.bda-search-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.bda-search-wrapper .twitter-typeahead {
+  display: block !important;
+}
+
+.bda-search-wrapper .tt-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  min-width: 420px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--bda-border);
+  border-radius: var(--bda-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 10000;
+}
+
+.bda-search-wrapper .tt-suggestion {
+  cursor: pointer;
+}
+
+.bda-search-wrapper .tt-suggestion:hover,
+.bda-search-wrapper .tt-suggestion.tt-cursor {
+  background: var(--bda-slate-50);
+}
+
 .bda-search-suggestion {
-  padding: 6px 12px;
+  padding: 7px 14px;
   font-size: var(--bda-font-size-sm);
+  font-family: var(--bda-font-mono);
+  color: var(--bda-brand);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bda-search-suggestion .tt-highlight {
+  font-weight: 700;
+  color: var(--bda-slate-900);
 }
 
 /* =============================================================================
