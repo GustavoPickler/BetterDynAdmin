@@ -680,9 +680,11 @@ export class BdaRepository {
 
   addToQueryEditor(query: string): void {
     if (!this.editor) return;
-    const cur = this.editor.getCursor();
-    if (cur.ch !== 0) this.editor.setCursor(cur.line + 1, 0);
-    this.editor.replaceSelection(query);
+    const current = this.editor.getDoc().getValue().trimEnd();
+    const newValue = current ? `${current}\n\n${query}` : query;
+    this.editor.getDoc().setValue(newValue);
+    const lines = newValue.split('\n');
+    this.editor.setCursor(lines.length - 1, 0);
   }
 
   private setQueryEditorValue(value: string): void {
