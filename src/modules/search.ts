@@ -8,7 +8,7 @@ import { logTrace } from '../core/common';
 export class BdaSearch {
   init(options: { align?: string } = {}): void {
     logTrace('BdaSearch init');
-    const $searchField = $('#searchField');
+    const $searchField = $('#searchFieldBDA');
     if ($searchField.length === 0) return;
     this.build($searchField, options);
   }

@@ -909,7 +909,7 @@
     }
     init(options = {}) {
       logTrace("BdaSearch init");
-      const $searchField = $("#searchField");
+      const $searchField = $("#searchFieldBDA");
       if ($searchField.length === 0) return;
       this.build($searchField, options);
     }
@@ -1092,14 +1092,7 @@
       $(
         '<form class="bda-nav__search" action="/dyn/admin/atg/dynamo/admin/en/cmpn-search.jhtml"><input type="text" name="query" id="searchFieldBDA" placeholder="Search… (ctrl+shift+f)"></form>'
       ).appendTo($parent);
-      try {
-        const autocomplete = bdaStorage.getConfigurationValue("search_autocomplete") === true;
-        if (autocomplete) {
-          this.search.init({ align: "right" });
-        }
-      } catch (e) {
-        console.error(e);
-      }
+      this.search.init({ align: "right" });
       $(document).on("keypress", (e) => {
         const isFocusKey = e.which === 70 && e.ctrlKey && e.shiftKey || e.which === 6 && e.ctrlKey && e.shiftKey;
         if (isFocusKey) $("#searchFieldBDA").trigger("focus");

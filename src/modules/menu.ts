@@ -143,14 +143,7 @@ export class BdaMenu {
       '</form>',
     ).appendTo($parent);
 
-    try {
-      const autocomplete = bdaStorage.getConfigurationValue('search_autocomplete') === true;
-      if (autocomplete) {
-        this.search.init({ align: 'right' });
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    this.search.init({ align: 'right' });
 
     $(document).on('keypress', (e) => {
       const isFocusKey =
