@@ -462,7 +462,7 @@ export function registerJQueryExtensions(): void {
           closeOnBackdrop: false,
           buttons: options.options.map((opt) => ({
             label: opt.label,
-            callback: opt._callback,
+            callback: () => { opt._callback?.(); modal.hide(); },
           })),
         });
         modal.show();

@@ -1,3 +1,20 @@
+<p><strong>Version 3.1 — Repository &amp; UX Improvements</strong></p>
+<ul>
+  <li>[Repository] Descriptor results rendered as independent cards in a responsive 2-column grid</li>
+  <li>[Repository] Per-card minimize / close controls with independent row heights</li>
+  <li>[Repository] Property name search inside each descriptor card (matches formatted name and raw key)</li>
+  <li>[Repository] Property names formatted to Title Case with raw technical key shown below</li>
+  <li>[Repository] Structured raw XML viewer — collapsible per-item sections with search by ID</li>
+  <li>[Repository] "Show full text" toggle for truncated property values (reversible)</li>
+  <li>[Repository] Query editor normalizes blank lines — always adds exactly one blank line separator</li>
+  <li>[Repository] R / D / E badges on properties (read-only, derived, exportable)</li>
+  <li>[Scheduler] Full redesign: card layout with search bar, clean date formatting, and footer counter</li>
+  <li>[Scheduler] Timeline visualization powered by vis.js (toggle button)</li>
+  <li>[Scheduler] Delete checked jobs button in footer</li>
+  <li>[Component Search] Full page redesign — card layout, styled query form, results list with hover states</li>
+  <li>[Global] Navbar is now sticky — stays fixed at top of page on scroll</li>
+  <li>[Global] Duplicate Oracle Commerce brand element removed from page header</li>
+</ul>
 <p><strong>Version 3.0 — UI Overhaul</strong></p>
 <ul>
   <li>[Global] Redesigned navbar: fixed top bar with BDA brand, search, and action buttons</li>
